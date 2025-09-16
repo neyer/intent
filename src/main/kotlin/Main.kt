@@ -1,6 +1,7 @@
 package com.intentevolved
 
-import com.intentevolved.com.intentevolved.intent.Intent
+import com.intentevolved.com.intentevolved.Intent
+import com.intentevolved.com.intentevolved.IntentServiceImpl
 import java.io.File
 import java.io.FileOutputStream
 
@@ -11,40 +12,27 @@ fun main() {
 
 
 
-    val streamBuilder = IntentStream.newBuilder()
+    val service = IntentServiceImpl()
 
-    var nextId = 0L
     var exit = false
 
     while (!exit) {
-        println("Enter intent.")
+        println("Enter Op:")
         val text = readLine();
         if (text == "exit") {
             exit = true
             continue
         }
         else if (text == "add") {
-            val op = Op.newBuilder()
-
-            val createBuilder = op.createIntentBuilder
             println("Enter Intent: ")
-            createBuilder.setText(readlnOrNull())
-            createBuilder.setId(nextId)
-            op.setCreateIntent(createBuilder.build())
-            streamBuilder.addOps(op)
+            service.addIntent(readlnOrNull()!!)
         } else if (text == "edit") {
             println("Enter Id: ")
         }
-        ++nextId
     }
 
-    val intentStream = streamBuilder.build()
-    println(intentStream.toString())
-    val file = File("intent_stream.bin")
-    FileOutputStream(file).use { output ->
-        intentStream.writeTo(output)
-    }
-
-    println("IntentStream written to ${file.absolutePath}")
+    service.print()
+    service.writeToFile("intent_stream.bin")
+    println("IntentStream written.")
 
 }
