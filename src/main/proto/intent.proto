@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package com.intentevolved;
+
+// Kotlin/Java classes will be generated under com.intentevolved
+option java_package = "com.intentevolved";
+option java_multiple_files = true;
+
+message IntentStream {
+  repeated Op ops = 1;
+}
+
+message Op {
+  oneof payload {
+    CreateIntent create_intent = 1;
+    UpdateIntent update_intent = 2;
+    DeleteIntent delete_intent = 3;
+  }
+}
+
+message CreateIntent {
+  int64 id = 1; // this will be provided by the service
+  string text = 2;
+}
+
+message UpdateIntent {
+  int64 id = 1;
+  string new_text = 2;
+}
+
+message DeleteIntent {
+  int64 id = 1;
+}
