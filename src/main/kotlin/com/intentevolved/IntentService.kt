@@ -7,4 +7,6 @@ interface IntentService {
     fun addIntent(text: String): Intent
 
     fun getById(id: Long): Intent?
+
+    fun edit(id: Long, newText: String)
 }

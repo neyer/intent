@@ -26,8 +26,12 @@ fun main() {
         else if (text == "add") {
             println("Enter Intent: ")
             service.addIntent(readlnOrNull()!!)
-        } else if (text == "edit") {
+        } else if (text == "update") {
             println("Enter Id: ")
+            val id = readln().toLong()
+            println("Enter new text")
+            val text = readln()
+            service.edit(id, text)
         }
     }
 

@@ -13,7 +13,7 @@ message IntentStream {
 message Op {
   oneof payload {
     CreateIntent create_intent = 1;
-    UpdateIntent update_intent = 2;
+    UpdateIntentText update_intent = 2;
     DeleteIntent delete_intent = 3;
   }
 }
@@ -21,11 +21,17 @@ message Op {
 message CreateIntent {
   int64 id = 1; // this will be provided by the service
   string text = 2;
+  optional int64 parentId = 3;
 }
 
-message UpdateIntent {
+message UpdateIntentText {
   int64 id = 1;
   string new_text = 2;
+}
+
+message UpdateIntentParent {
+  int64 id = 1;
+  int64 parentId = 2;
 }
 
 message DeleteIntent {

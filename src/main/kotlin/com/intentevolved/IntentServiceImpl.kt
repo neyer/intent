@@ -17,6 +17,9 @@ class IntentServiceImpl : IntentService {
         val op = Op.newBuilder()
         // create the item on the stream
         // we may end up putting this into a separate one
+        // probably could do this in a derived class,
+        // so the base class just handles the state updates in memory
+        // the derived class  also writes out a new stream
         val createBuilder = op.createIntentBuilder
         createBuilder.setText(text)
         createBuilder.setId(nextId)
@@ -38,6 +41,16 @@ class IntentServiceImpl : IntentService {
 
     override fun getById(id: Long): Intent? {
         return byId[id]
+    }
+
+    override fun edit(id: Long, newText: String) {
+        val existing = byId[id] ?: throw IllegalArgumentException("No intent with id $id")
+        val newOne = IntentImpl(
+            text=newText,
+            id=id,
+            serviceImpl=this
+        )
+        byId[id] = newOne
     }
 
 
