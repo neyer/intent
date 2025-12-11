@@ -44,7 +44,7 @@ class IntentServiceImpl : IntentService {
     }
 
     override fun edit(id: Long, newText: String) {
-        val existing = byId[id] ?: throw IllegalArgumentException("No intent with id $id")
+        byId[id] ?: throw IllegalArgumentException("No intent with id $id")
         val newOne = IntentImpl(
             text=newText,
             id=id,
@@ -52,6 +52,8 @@ class IntentServiceImpl : IntentService {
         )
         byId[id] = newOne
     }
+
+    override fun getAll(): List<Intent>  = byId.values.toList()
 
 
     fun writeToFile(fileName: String) {
