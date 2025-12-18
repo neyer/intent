@@ -1,0 +1,2 @@
+* add ability nest intents via the terminal app
+* have the terminal app save and exit to a file
