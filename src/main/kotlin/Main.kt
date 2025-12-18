@@ -22,11 +22,13 @@ fun main() {
         // Draw top line (input buffer)
         val tg = screen.newTextGraphics()
         tg.putString(0, 0, "Input: ${handler.inputBuffer}")
+        tg.putString(0, 1, "Result: ${handler.commandResult}")
 
+        val intentOffset = 3
         // Draw rest of application state
         val intents = service.getAll()
         intents.forEachIndexed { i, intent ->
-            tg.putString(0, i + 2, "${intent.id()} - ${intent.text()}")
+            tg.putString(0, i + intentOffset, "${intent.id()} - ${intent.text()}")
         }
 
         screen.refresh()
@@ -49,6 +51,8 @@ class InputHandler(
     val inputBuffer = StringBuilder()
 
     var keepGoing = true ;
+
+    var commandResult : String = ""
 
     fun handleKeyStroke(key: KeyStroke)  {
 
@@ -77,9 +81,15 @@ class InputHandler(
 
         when {
             command == "exit" -> return false
-            command == "add" -> {
+            command.startsWith("add ") -> {
                 // For demo: just add a dummy intent
-                service.addIntent("new intent at ${System.currentTimeMillis()}")
+                var parts = command.split(" ", limit=2)
+                val newIntent = if (parts.size == 2) {
+                    service.addIntent(parts[1])
+                } else {
+                    service.addIntent("new intent at ${System.currentTimeMillis()}")
+                }
+                commandResult = "added intent ${newIntent.id()}"
             }
 
             command.startsWith("update") -> {
@@ -89,6 +99,7 @@ class InputHandler(
                     val id = parts[1].toLongOrNull()
                     val newText = parts[2]
                     if (id != null) service.edit(id, newText)
+                    commandResult = "updated intent $id"
                 }
             }
         }
