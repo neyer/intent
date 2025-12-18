@@ -11,19 +11,17 @@ fun main() {
     val screen: Screen = terminalFactory.createScreen()
     screen.startScreen()
 
-    var running = true
-    val inputBuffer = StringBuilder()
-
     val service = IntentServiceImpl()
+    val handler = InputHandler(service)
     var mode : TerminalMode = TerminalMode.Command
 
-    while (running) {
+    while (handler.keepGoing) {
         // Clear screen
         screen.clear()
 
         // Draw top line (input buffer)
         val tg = screen.newTextGraphics()
-        tg.putString(0, 0, "Input: $inputBuffer")
+        tg.putString(0, 0, "Input: ${handler.inputBuffer}")
 
         // Draw rest of application state
         val intents = service.getAll()
@@ -37,20 +35,7 @@ fun main() {
         val key: KeyStroke? = screen.pollInput()
 
         if (key != null) {
-            when (key.keyType) {
-                KeyType.Enter -> {
-                    running = getInput(inputBuffer, service)
-                }
-                KeyType.Backspace -> {
-                    if (inputBuffer.isNotEmpty()) {
-                        inputBuffer.deleteCharAt(inputBuffer.length - 1)
-                    }
-                }
-                KeyType.Character -> {
-                    inputBuffer.append(key.character)
-                }
-                else -> {}
-            }
+            handler.handleKeyStroke(key);
         }
 
         Thread.sleep(30) // avoid CPU spin
@@ -63,18 +48,29 @@ class InputHandler(
 ) {
     val inputBuffer = StringBuilder()
 
-    private fun addInputKey(keyType: KeyType): {
+    var keepGoing = true ;
 
-        if (keyType == KeyType.Enter)  {
-            handleEnter()
-        } else if (ke) {
-            // add the key to the buffer
-            keyType
+    fun handleKeyStroke(key: KeyStroke)  {
 
+        when (key.keyType) {
+            KeyType.Enter -> {
+                keepGoing = handleEnter()
+            }
+            KeyType.Backspace -> {
+                if (inputBuffer.isNotEmpty()) {
+                    inputBuffer.deleteCharAt(inputBuffer.length - 1)
+                }
+            }
+            KeyType.Character -> {
+                inputBuffer.append(key.character)
+            }
+            else -> {}
         }
-
-
     }
+
+
+    // returns false if the exit command is encountered
+    // otherwise, either adds or updates the intent
     private fun handleEnter(): Boolean {
         val command = inputBuffer.toString().trim()
         inputBuffer.clear()
@@ -112,33 +108,6 @@ fun KeyStroke.toAscii(): Char? {
     }
 }
 
-
-private fun getInput(
-    inputBuffer: StringBuilder,
-    service: IntentServiceImpl
-): Boolean {
-    val command = inputBuffer.toString().trim()
-    inputBuffer.clear()
-
-    when {
-        command == "exit" -> return false
-        command == "add" -> {
-            // For demo: just add a dummy intent
-            service.addIntent("new intent at ${System.currentTimeMillis()}")
-        }
-
-        command.startsWith("update") -> {
-            // Format: update <id> <new text>
-            val parts = command.split(" ", limit = 3)
-            if (parts.size == 3) {
-                val id = parts[1].toLongOrNull()
-                val newText = parts[2]
-                if (id != null) service.edit(id, newText)
-            }
-        }
-    }
-    return true
-}
 
 enum class TerminalMode {
     Command,
