@@ -10,8 +10,11 @@ class InputHandler(
     val inputBuffer = StringBuilder()
 
     var keepGoing = true ;
-
     var commandResult : String = ""
+
+    // this is the intent we are currently focused on
+    // it's the default parent for all new intents
+    var focalIntent: Long = 0
 
     fun handleKeyStroke(key: KeyStroke)  {
 
@@ -44,13 +47,26 @@ class InputHandler(
                 // For demo: just add a dummy intent
                 var parts = command.split(" ", limit=2)
                 val newIntent = if (parts.size == 2) {
-                    service.addIntent(parts[1])
+                    service.addIntent(parts[1], focalIntent)
                 } else {
-                    service.addIntent("new intent at ${System.currentTimeMillis()}")
+                    service.addIntent("new intent at ${System.currentTimeMillis()}", focalIntent)
                 }
                 commandResult = "added intent ${newIntent.id()}"
             }
-
+            command.startsWith("focus ") -> {
+                val parts = command.split(" ")
+                if (parts.size == 2) {
+                    val newFocus = parts[1].toLongOrNull()
+                    if (newFocus == null) {
+                        commandResult = "cannot focus on invalid intent id ${parts[1]}"
+                    } else {
+                        focalIntent = newFocus
+                        commandResult = "Focusing on $newFocus"
+                    }
+                } else {
+                    commandResult = "Focus takes a single intent id"
+                }
+            }
             command.startsWith("update") -> {
                 // Format: update <id> <new text>
                 val parts = command.split(" ", limit = 3)
@@ -59,6 +75,9 @@ class InputHandler(
                     val newText = parts[2]
                     if (id != null) service.edit(id, newText)
                     commandResult = "updated intent $id"
+                } else {
+                    commandResult = "Update command requires an id followed by the new text."
+
                 }
             }
         }

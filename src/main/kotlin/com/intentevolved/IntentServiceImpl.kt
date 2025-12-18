@@ -12,7 +12,7 @@ class IntentServiceImpl : IntentService {
 
     private val byId = mutableMapOf<Long, Intent>()
 
-    override fun addIntent(text: String): Intent {
+    override fun addIntent(text: String, parentId: Long): Intent {
 
         val op = Op.newBuilder()
         // create the item on the stream
@@ -23,6 +23,7 @@ class IntentServiceImpl : IntentService {
         val createBuilder = op.createIntentBuilder
         createBuilder.setText(text)
         createBuilder.setId(nextId)
+        createBuilder.setParentId(parentId)
         op.setCreateIntent(createBuilder.build())
         streamBuilder.addOps(op)
 

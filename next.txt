@@ -1,2 +1,5 @@
-* add ability nest intents via the terminal app
+* give intent service the ability to give a path to an intent
+ . if you are focused on intent 7, which is a child of intent 0
+ . you want that full path accessiable
+ . we also want sibling intents
 * have the terminal app save and exit to a file
