@@ -12,7 +12,8 @@ fun main() {
     val screen: Screen = terminalFactory.createScreen()
     screen.startScreen()
 
-    val service = IntentServiceImpl("Root goes here")
+    // todo: make this come from args
+    val service = IntentServiceImpl.fromFile("current.pb")
     val handler = InputHandler(service)
 
     while (handler.keepGoing) {

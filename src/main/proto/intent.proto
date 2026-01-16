@@ -24,17 +24,15 @@ message Op {
     CreateIntent create_intent = 1;
     UpdateIntentText update_intent = 2;
     DeleteIntent delete_intent = 3;
+    FulfillIntent fulfill_intent = 4;
   }
 }
 
 message CreateIntent {
   int64 id = 1; // this will be provided by the service
   string text = 2;
-  // this is kind of ugly because everything has to have a parent
-  // but what about the root intent? if you add a ton without parents
-  // they all implicit have the root intent
-  // so you'd think you want the initial intent to always have id 0
-  // maybe what you want is the ops all follow some initial intent, there's like a preamble
+  // having a parent is optional
+  // if you don't explicitly specify a parent, the 'root' intent is the parent
   optional int64 parentId = 3;
 }
 
@@ -49,5 +47,13 @@ message UpdateIntentParent {
 }
 
 message DeleteIntent {
+  int64 id = 1;
+}
+
+// eventually this will become more complex
+// once the stream works for multiple authors, there'll be a mechanism where
+// - one agent says, I've fullfilled the intent
+// - stream owner says "i've confirmed this fulfilled the intent"
+message FulfillIntent {
   int64 id = 1;
 }

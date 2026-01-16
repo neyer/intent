@@ -13,4 +13,6 @@ interface IntentService {
 
     // probably won't be in here for long
     fun getAll(): List<Intent>
+
+    fun writeToFile(fileName: String)
 }

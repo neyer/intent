@@ -18,7 +18,7 @@ class InputHandlerTest {
 
     @Test
     fun `Character appends to inputBuffer`() {
-        val service = IntentServiceImpl("testing")
+        val service = IntentServiceImpl.new("testing")
         val h = InputHandler(service)
 
         h.handleKeyStroke(ch('a'))
@@ -30,7 +30,7 @@ class InputHandlerTest {
 
     @Test
     fun `Backspace removes last char when buffer non-empty`() {
-        val service = IntentServiceImpl("testing")
+        val service = IntentServiceImpl.new("testing")
         val h = InputHandler(service)
 
         h.handleKeyStroke(ch('a'))
@@ -42,7 +42,7 @@ class InputHandlerTest {
 
     @Test
     fun `Backspace on empty buffer does nothing`() {
-        val service = IntentServiceImpl("testing")
+        val service = IntentServiceImpl.new("testing")
         val h = InputHandler(service)
 
         h.handleKeyStroke(backspace())
@@ -52,7 +52,7 @@ class InputHandlerTest {
 
     @Test
     fun `Enter on exit command sets keepGoing false and clears buffer`() {
-        val service = IntentServiceImpl("testing")
+        val service = IntentServiceImpl.new("testing")
         val h = InputHandler(service)
 
         "exit".forEach { h.handleKeyStroke(ch(it)) }
@@ -65,7 +65,7 @@ class InputHandlerTest {
 
     @Test
     fun `Enter on add command calls service and sets commandResult`() {
-        val service = IntentServiceImpl("testing")
+        val service = IntentServiceImpl.new("testing")
         val h = InputHandler(service)
 
         "add buy milk".forEach { h.handleKeyStroke(ch(it)) }
@@ -79,7 +79,7 @@ class InputHandlerTest {
 
     @Test
     fun `Enter on update command calls edit and sets commandResult`() {
-        val service = IntentServiceImpl("testing")
+        val service = IntentServiceImpl.new("testing")
         val h = InputHandler(service)
 
         "add buy milk".forEach { h.handleKeyStroke(ch(it)) }

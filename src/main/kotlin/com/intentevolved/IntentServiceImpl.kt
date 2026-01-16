@@ -1,75 +1,132 @@
 package com.intentevolved.com.intentevolved
 
+import com.intentevolved.CreateIntent
 import com.intentevolved.Header
 import com.intentevolved.IntentStream
+import com.intentevolved.IntentStream.Builder as IntentStreamBuilder
 import com.intentevolved.Op
+import com.intentevolved.UpdateIntentText
+import com.intentevolved.DeleteIntent
+import com.intentevolved.FulfillIntent
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 
-class IntentServiceImpl(
-    val rootIntent: String
-
+class IntentServiceImpl private constructor(
+    private val streamBuilder: IntentStreamBuilder
 ) : IntentService {
+    companion object {
+        fun fromFile(fileName: String): IntentServiceImpl {
+            val streamBuilder = streamBuilderFromFile(fileName)
+            val service = IntentServiceImpl(streamBuilder)
+            service.replayOps()
+            return service
+        }
 
-    private val streamBuilder = IntentStream.newBuilder()
+        fun new(rootIntent: String): IntentServiceImpl {
+            val streamBuilder = IntentStream.newBuilder()
+            streamBuilder.headerBuilder.setRootIntent(rootIntent)
+            return IntentServiceImpl(streamBuilder)
+        }
 
-    init {
-        streamBuilder.setHeader(
-            Header.newBuilder().setRootIntent(rootIntent).build()
-        )
+        fun streamBuilderFromFile(fileName: String): IntentStreamBuilder {
+            val file = File(fileName)
+            return if (file.exists()) {
+                FileInputStream(file).use { input ->
+                    IntentStream.parseFrom(input).toBuilder()
+                }
+            } else {
+                throw IllegalArgumentException("No such file $fileName")
+            }
+        }
     }
-    // the root intent always has id 0
-    // so 'next' id should always return 1
-    private var nextId = 1L
 
+    private var nextId = 1L
     private val byId = mutableMapOf<Long, Intent>()
 
-    override fun addIntent(text: String, parentId: Long): Intent {
-
-        val op = Op.newBuilder()
-        // create the item on the stream
-        // we may end up putting this into a separate one
-        // probably could do this in a derived class,
-        // so the base class just handles the state updates in memory
-        // the derived class  also writes out a new stream
-        val createBuilder = op.createIntentBuilder
-        createBuilder.setText(text)
-        createBuilder.setId(nextId)
-        createBuilder.setParentId(parentId)
-        op.setCreateIntent(createBuilder.build())
-        streamBuilder.addOps(op)
-
-        val thisOne = IntentImpl(
-            text=text,
-            id =nextId,
-            serviceImpl = this
-        )
-        // store it in the map and update the counter
-        byId[nextId] = thisOne
-        ++nextId
-
-        return thisOne
-
+    private fun replayOps() {
+        val stream = streamBuilder.build()
+        stream.opsList.forEach { op ->
+            when {
+                op.hasCreateIntent() -> handleCreateIntent(op.createIntent)
+                op.hasUpdateIntent() -> handleUpdateIntent(op.updateIntent)
+                op.hasDeleteIntent() -> handleDeleteIntent(op.deleteIntent)
+                op.hasFulfillIntent() -> handleFulfillIntent(op.fulfillIntent)
+            }
+        }
     }
 
-    override fun getById(id: Long): Intent? {
-        return byId[id]
+    private fun handleCreateIntent(create: CreateIntent) {
+        val intent = IntentImpl(
+            text = create.text,
+            id = create.id,
+            parentId = if (create.hasParentId()) create.parentId else null,
+            serviceImpl = this
+        )
+        byId[create.id] = intent
+
+        if (create.id >= nextId) {
+            nextId = create.id + 1
+        }
+    }
+
+    private fun handleUpdateIntent(update: UpdateIntentText) {
+        val existing = byId[update.id] ?: return
+        val updated = IntentImpl(
+            text = update.newText,
+            id = update.id,
+            parentId = (existing as IntentImpl).parentId,
+            serviceImpl = this
+        )
+        byId[update.id] = updated
+    }
+
+    private fun handleDeleteIntent(delete: DeleteIntent) {
+        byId.remove(delete.id)
+    }
+
+    private fun handleFulfillIntent(fulfill: FulfillIntent) {
+        // TODO: Handle fulfillment logic when you implement it
+    }
+
+    override fun addIntent(text: String, parentId: Long): Intent {
+        val createIntent = CreateIntent.newBuilder()
+            .setId(nextId)
+            .setText(text)
+            .setParentId(parentId)
+            .build()
+
+        val op = Op.newBuilder()
+            .setCreateIntent(createIntent)
+            .build()
+
+        streamBuilder.addOps(op)
+        handleCreateIntent(createIntent)
+
+        return byId[createIntent.id]!!
     }
 
     override fun edit(id: Long, newText: String) {
         byId[id] ?: throw IllegalArgumentException("No intent with id $id")
-        val newOne = IntentImpl(
-            text=newText,
-            id=id,
-            serviceImpl=this
-        )
-        byId[id] = newOne
+
+        val updateIntent = UpdateIntentText.newBuilder()
+            .setId(id)
+            .setNewText(newText)
+            .build()
+
+        val op = Op.newBuilder()
+            .setUpdateIntent(updateIntent)
+            .build()
+
+        streamBuilder.addOps(op)
+        handleUpdateIntent(updateIntent)
     }
 
-    override fun getAll(): List<Intent>  = byId.values.toList()
+    override fun getById(id: Long): Intent? = byId[id]
 
+    override fun getAll(): List<Intent> = byId.values.toList()
 
-    fun writeToFile(fileName: String) {
+    override fun writeToFile(fileName: String) {
         val stream = streamBuilder.build()
         val file = File(fileName)
         FileOutputStream(file).use { output ->
@@ -85,12 +142,11 @@ class IntentServiceImpl(
 class IntentImpl(
     private val text: String,
     private val id: Long,
-    private val parentId: Long? = null,
+    internal val parentId: Long? = null,
     private val serviceImpl: IntentServiceImpl
 ) : Intent {
     override fun text() = text
     override fun id() = id
     override fun parent() = if (parentId == null) null else serviceImpl.getById(parentId)
     override fun children(): List<Intent> = listOf()
-
 }

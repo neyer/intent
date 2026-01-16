@@ -2,4 +2,6 @@
  . if you are focused on intent 7, which is a child of intent 0
  . you want that full path accessiable
  . we also want sibling intents
-* have the terminal app save and exit to a file
+x have the terminal app save and exit to a file
+x have the reminal app be able to read from a file
+x replay the stream of intents so the state is recreated on load

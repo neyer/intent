@@ -2,10 +2,10 @@ package com.intentevolved.com.intentevolved.terminal
 
 import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
-import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.IntentService
 
 class InputHandler(
-    val service: IntentServiceImpl
+    val service: IntentService
 ) {
     val inputBuffer = StringBuilder()
 
@@ -15,6 +15,8 @@ class InputHandler(
     // this is the intent we are currently focused on
     // it's the default parent for all new intents
     var focalIntent: Long = 0
+
+    val executor = CommandExecutor(service)
 
     fun handleKeyStroke(key: KeyStroke)  {
 
@@ -41,47 +43,105 @@ class InputHandler(
         val command = inputBuffer.toString().trim()
         inputBuffer.clear()
 
-        when {
-            command == "exit" -> return false
-            command.startsWith("add ") -> {
-                // For demo: just add a dummy intent
-                var parts = command.split(" ", limit=2)
-                val newIntent = if (parts.size == 2) {
-                    service.addIntent(parts[1], focalIntent)
-                } else {
-                    service.addIntent("new intent at ${System.currentTimeMillis()}", focalIntent)
-                }
-                commandResult = "added intent ${newIntent.id()}"
-            }
-            command.startsWith("focus ") -> {
-                val parts = command.split(" ")
-                if (parts.size == 2) {
-                    val newFocus = parts[1].toLongOrNull()
-                    if (newFocus == null) {
-                        commandResult = "cannot focus on invalid intent id ${parts[1]}"
-                    } else {
-                        focalIntent = newFocus
-                        commandResult = "Focusing on $newFocus"
-                    }
-                } else {
-                    commandResult = "Focus takes a single intent id"
-                }
-            }
-            command.startsWith("update") -> {
-                // Format: update <id> <new text>
-                val parts = command.split(" ", limit = 3)
-                if (parts.size == 3) {
-                    val id = parts[1].toLongOrNull()
-                    val newText = parts[2]
-                    if (id != null) service.edit(id, newText)
-                    commandResult = "updated intent $id"
-                } else {
-                    commandResult = "Update command requires an id followed by the new text."
-
-                }
-            }
+        if (command == "exit") {
+            return false;
+        }
+        else {
+            val (result, newFocalIntent) = executor.execute(command, focalIntent)
+            commandResult = result
+            focalIntent = newFocalIntent
         }
         return true
     }
 
+}
+
+// Base command class
+abstract class Command(val keyword: String) {
+    abstract fun process(args: String, service: IntentService, focalIntent: Long): CommandResult
+
+    fun matches(command: String): Boolean = command.startsWith("$keyword ")
+
+    fun extractArgs(command: String): String =
+        command.removePrefix("$keyword ").trim()
+}
+
+// Result wrapper to handle both output and state changes
+data class CommandResult(
+    val message: String,
+    val newFocalIntent: Long? = null // null means no change
+)
+
+// Command implementations
+class AddCommand : Command("add") {
+    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+        val intentText = args.ifEmpty { "new intent at ${System.currentTimeMillis()}" }
+        val newIntent = service.addIntent(intentText, focalIntent)
+        return CommandResult("added intent ${newIntent.id()}")
+    }
+}
+
+class FocusCommand : Command("focus") {
+    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+        val parts = args.split(" ")
+
+        if (parts.size != 1) {
+            return CommandResult("Focus takes a single intent id")
+        }
+
+        val newFocus = parts[0].toLongOrNull()
+        return if (newFocus == null) {
+            CommandResult("cannot focus on invalid intent id ${parts[0]}")
+        } else {
+            CommandResult("Focusing on $newFocus", newFocalIntent = newFocus)
+        }
+    }
+}
+
+class UpdateCommand : Command("update") {
+    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+        val parts = args.split(" ", limit = 2)
+
+        if (parts.size != 2) {
+            return CommandResult("Update command requires an id followed by the new text.")
+        }
+
+        val id = parts[0].toLongOrNull()
+        return if (id == null) {
+            CommandResult("Invalid intent id: ${parts[0]}")
+        } else {
+            service.edit(id, parts[1])
+            CommandResult("updated intent $id")
+        }
+    }
+}
+
+class WriteCommand : Command("write") {
+    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+        service.writeToFile(args)
+        return CommandResult("wrote to file: $args")
+    }
+}
+
+// Command registry and executor
+class CommandExecutor(private val service: IntentService) {
+    private val commands = listOf(
+        AddCommand(),
+        FocusCommand(),
+        UpdateCommand(),
+        WriteCommand()
+    )
+
+    fun execute(command: String, currentFocalIntent: Long): Pair<String, Long> {
+        val matchedCommand = commands.firstOrNull { it.matches(command) }
+
+        if (matchedCommand == null) {
+            return "Unknown command" to currentFocalIntent
+        }
+        val args = matchedCommand.extractArgs(command)
+        val result = matchedCommand.process(args, service, currentFocalIntent)
+
+        val newFocalIntent = result.newFocalIntent ?: currentFocalIntent
+        return result.message to newFocalIntent
+    }
 }
