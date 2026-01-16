@@ -18,7 +18,7 @@ class InputHandlerTest {
 
     @Test
     fun `Character appends to inputBuffer`() {
-        val service = IntentServiceImpl()
+        val service = IntentServiceImpl("testing")
         val h = InputHandler(service)
 
         h.handleKeyStroke(ch('a'))
@@ -30,7 +30,7 @@ class InputHandlerTest {
 
     @Test
     fun `Backspace removes last char when buffer non-empty`() {
-        val service = IntentServiceImpl()
+        val service = IntentServiceImpl("testing")
         val h = InputHandler(service)
 
         h.handleKeyStroke(ch('a'))
@@ -42,7 +42,7 @@ class InputHandlerTest {
 
     @Test
     fun `Backspace on empty buffer does nothing`() {
-        val service = IntentServiceImpl()
+        val service = IntentServiceImpl("testing")
         val h = InputHandler(service)
 
         h.handleKeyStroke(backspace())
@@ -52,7 +52,7 @@ class InputHandlerTest {
 
     @Test
     fun `Enter on exit command sets keepGoing false and clears buffer`() {
-        val service = IntentServiceImpl()
+        val service = IntentServiceImpl("testing")
         val h = InputHandler(service)
 
         "exit".forEach { h.handleKeyStroke(ch(it)) }
@@ -65,7 +65,7 @@ class InputHandlerTest {
 
     @Test
     fun `Enter on add command calls service and sets commandResult`() {
-        val service = IntentServiceImpl()
+        val service = IntentServiceImpl("testing")
         val h = InputHandler(service)
 
         "add buy milk".forEach { h.handleKeyStroke(ch(it)) }
@@ -73,13 +73,13 @@ class InputHandlerTest {
 
         assertTrue(h.keepGoing)
         assertEquals("", h.inputBuffer.toString())
-        assertEquals("buy milk", service.getAll()[0].text())
-        assertEquals("added intent 0", h.commandResult)
+        assertEquals("buy milk", service.getById(1)!!.text())
+        assertEquals("added intent 1", h.commandResult)
     }
 
     @Test
     fun `Enter on update command calls edit and sets commandResult`() {
-        val service = IntentServiceImpl()
+        val service = IntentServiceImpl("testing")
         val h = InputHandler(service)
 
         "add buy milk".forEach { h.handleKeyStroke(ch(it)) }
@@ -87,11 +87,11 @@ class InputHandlerTest {
 
         assertTrue(h.keepGoing)
         assertEquals("", h.inputBuffer.toString())
-        assertEquals("added intent 0", h.commandResult)
+        assertEquals("added intent 1", h.commandResult)
 
-        "update 0 buy eggs".forEach { h.handleKeyStroke(ch(it)) }
+        "update 1 buy eggs".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
-        assertEquals("buy eggs", service.getAll()[0].text())
-        assertEquals("updated intent 0", h.commandResult)
+        assertEquals("buy eggs", service.getById(1)!!.text())
+        assertEquals("updated intent 1", h.commandResult)
     }
 }

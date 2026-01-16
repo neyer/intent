@@ -1,14 +1,26 @@
 package com.intentevolved.com.intentevolved
 
+import com.intentevolved.Header
 import com.intentevolved.IntentStream
 import com.intentevolved.Op
 import java.io.File
 import java.io.FileOutputStream
 
-class IntentServiceImpl : IntentService {
+class IntentServiceImpl(
+    val rootIntent: String
+
+) : IntentService {
 
     private val streamBuilder = IntentStream.newBuilder()
-    private var nextId = 0L
+
+    init {
+        streamBuilder.setHeader(
+            Header.newBuilder().setRootIntent(rootIntent).build()
+        )
+    }
+    // the root intent always has id 0
+    // so 'next' id should always return 1
+    private var nextId = 1L
 
     private val byId = mutableMapOf<Long, Intent>()
 

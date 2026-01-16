@@ -12,7 +12,7 @@ fun main() {
     val screen: Screen = terminalFactory.createScreen()
     screen.startScreen()
 
-    val service = IntentServiceImpl()
+    val service = IntentServiceImpl("Root goes here")
     val handler = InputHandler(service)
 
     while (handler.keepGoing) {

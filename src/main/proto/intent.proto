@@ -7,9 +7,18 @@ option java_package = "com.intentevolved";
 option java_multiple_files = true;
 
 message IntentStream {
-  repeated Op ops = 1;
+  Header header = 1;
+  repeated Op ops = 2;
 }
 
+
+message Header {
+  // a text description of the end intent of the whole stream
+  // this object is effectively an intent with id '0'
+  string rootIntent = 1;
+  // todo: other details, like who wrote it, date started, etc
+
+}
 message Op {
   oneof payload {
     CreateIntent create_intent = 1;
