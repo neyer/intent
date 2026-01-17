@@ -93,4 +93,66 @@ class IntentServiceImplTest {
         assertEquals("Create database schema", loadedIntent3.text())
         assertEquals(intent3.id(), loadedIntent3.id())
     }
+
+    @Test
+    fun `getRelevant returns ancestry and immediate children`() {
+        // Create a hierarchy:
+        // Root -> parent (ID 1) -> middle (ID 2) -> child1 (ID 3), child2 (ID 4)
+        //                      -> sibling (ID 5)
+        val parent = service.addIntent("Parent intent", parentId = 0)
+        val middle = service.addIntent("Middle intent", parentId = parent.id())
+        val child1 = service.addIntent("Child 1", parentId = middle.id())
+        val child2 = service.addIntent("Child 2", parentId = middle.id())
+        val sibling = service.addIntent("Sibling intent", parentId = parent.id())
+
+        val relevant = service.getRelevant(middle.id())
+
+        // Should include: ancestry (parent), the intent itself (middle), and immediate children (child1, child2)
+        // Should NOT include: sibling (not a child of middle)
+        assertEquals(4, relevant.size)
+        
+        val relevantIds = relevant.map { it.id() }.toSet()
+        assertTrue(relevantIds.contains(parent.id()), "Should include parent in ancestry")
+        assertTrue(relevantIds.contains(middle.id()), "Should include the intent itself")
+        assertTrue(relevantIds.contains(child1.id()), "Should include child1")
+        assertTrue(relevantIds.contains(child2.id()), "Should include child2")
+        assertFalse(relevantIds.contains(sibling.id()), "Should not include sibling")
+    }
+
+    @Test
+    fun `getRelevant returns empty list for unknown id`() {
+        val relevant = service.getRelevant(999L)
+        assertTrue(relevant.isEmpty())
+    }
+
+    @Test
+    fun `getRelevant returns only children when intent has no parent`() {
+        val rootChild = service.addIntent("Root child", parentId = 0)
+        val grandchild1 = service.addIntent("Grandchild 1", parentId = rootChild.id())
+        val grandchild2 = service.addIntent("Grandchild 2", parentId = rootChild.id())
+
+        val relevant = service.getRelevant(rootChild.id())
+
+        // Should include: the intent itself and children (no ancestry since parent is root intent which isn't an Intent object)
+        assertEquals(3, relevant.size)
+        val relevantIds = relevant.map { it.id() }.toSet()
+        assertTrue(relevantIds.contains(rootChild.id()), "Should include the intent itself")
+        assertTrue(relevantIds.contains(grandchild1.id()))
+        assertTrue(relevantIds.contains(grandchild2.id()))
+    }
+
+    @Test
+    fun `getRelevant returns only ancestry when intent has no children`() {
+        val parent = service.addIntent("Parent", parentId = 0)
+        val grandparent = service.addIntent("Grandparent", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent.id())
+
+        val relevant = service.getRelevant(child.id())
+
+        // Should include: ancestry (parent) and the intent itself, no children
+        assertEquals(2, relevant.size)
+        val relevantIds = relevant.map { it.id() }.toSet()
+        assertTrue(relevantIds.contains(parent.id()), "Should include parent in ancestry")
+        assertTrue(relevantIds.contains(child.id()), "Should include the intent itself")
+    }
 }

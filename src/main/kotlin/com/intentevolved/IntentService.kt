@@ -14,5 +14,10 @@ interface IntentService {
     // probably won't be in here for long
     fun getAll(): List<Intent>
 
+    // gets intent objects directly relevant to this one
+    // - ancestry path
+    // - immediate children
+    fun getRelevant(id: Long): List<Intent>
+
     fun writeToFile(fileName: String)
 }

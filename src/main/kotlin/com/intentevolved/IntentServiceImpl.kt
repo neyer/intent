@@ -43,6 +43,7 @@ class IntentServiceImpl private constructor(
 
     private var nextId = 1L
     private val byId = mutableMapOf<Long, Intent>()
+    private val childrenById = mutableMapOf<Long, MutableList<Long>>().withDefault { mutableListOf() }
 
     private fun replayOps() {
         val stream = streamBuilder.build()
@@ -64,6 +65,13 @@ class IntentServiceImpl private constructor(
             serviceImpl = this
         )
         byId[create.id] = intent
+        if (intent.parentId != null) {
+            // link this child to its parent
+            val childList = childrenById.getValue(intent.parentId)
+            childList.add(create.id)
+            childrenById[intent.parentId] = childList
+        }
+
 
         if (create.id >= nextId) {
             nextId = create.id + 1
@@ -82,7 +90,11 @@ class IntentServiceImpl private constructor(
     }
 
     private fun handleDeleteIntent(delete: DeleteIntent) {
+        val existing = byId[delete.id]!!
         byId.remove(delete.id)
+        if (existing.parent() != null) {
+            childrenById[existing.parent()!!.id()]!!.remove(existing.id())
+        }
     }
 
     private fun handleFulfillIntent(fulfill: FulfillIntent) {
@@ -123,6 +135,24 @@ class IntentServiceImpl private constructor(
     }
 
     override fun getById(id: Long): Intent? = byId[id]
+
+    override fun getRelevant(id: Long): List<Intent> {
+        val intent = byId[id] ?: return emptyList()
+        
+        val relevant = mutableListOf<Intent>()
+        
+        // Add ancestry (all parents)
+        relevant.addAll(intent.getAncestry())
+        
+        // Add the intent itself
+        relevant.add(intent)
+        
+        // Add immediate children
+        val childIds = childrenById[id] ?: emptyList()
+        relevant.addAll(childIds.mapNotNull { childId -> byId[childId] })
+        
+        return relevant
+    }
 
     override fun getAll(): List<Intent> = byId.values.toList()
 
