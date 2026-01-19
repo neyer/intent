@@ -60,7 +60,7 @@ class InputHandler(
 abstract class Command(val keyword: String) {
     abstract fun process(args: String, service: IntentService, focalIntent: Long): CommandResult
 
-    fun matches(command: String): Boolean = command.startsWith("$keyword ")
+    fun matches(command: String): Boolean = command == keyword || command.startsWith("$keyword ")
 
     fun extractArgs(command: String): String =
         command.removePrefix("$keyword ").trim()
@@ -98,6 +98,27 @@ class FocusCommand : Command("focus") {
     }
 }
 
+class UpCommand : Command("up") {
+    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+        val parts = args.split(" ")
+
+        if (parts.size > 1) {
+            return CommandResult("Up takes no arguments.")
+        }
+
+        val existingFocus = service.getById(focalIntent)!!
+        val parent = existingFocus.parent()
+        if (parent == null) {
+            check(focalIntent == 0L) {
+                "Intent id $focalIntent had no parent but was not root intent."
+            }
+            return   CommandResult("At root intent, cannot go up ")
+        }
+        val newFocus = parent.id()
+        return   CommandResult("Focusing on $newFocus: ${parent.text()}" , newFocalIntent = newFocus)
+    }
+}
+
 class UpdateCommand : Command("update") {
     override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
         val parts = args.split(" ", limit = 2)
@@ -129,14 +150,15 @@ class CommandExecutor(private val service: IntentService) {
         AddCommand(),
         FocusCommand(),
         UpdateCommand(),
-        WriteCommand()
+        WriteCommand(),
+        UpCommand()
     )
 
     fun execute(command: String, currentFocalIntent: Long): Pair<String, Long> {
         val matchedCommand = commands.firstOrNull { it.matches(command) }
 
         if (matchedCommand == null) {
-            return "Unknown command" to currentFocalIntent
+            return "Unknown command $command" to currentFocalIntent
         }
         val args = matchedCommand.extractArgs(command)
         val result = matchedCommand.process(args, service, currentFocalIntent)
