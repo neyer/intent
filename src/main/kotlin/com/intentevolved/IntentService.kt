@@ -11,6 +11,8 @@ interface IntentService {
 
     fun edit(id: Long, newText: String)
 
+    fun moveParent(id: Long, newParentId: Long)
+
     // probably won't be in here for long
     fun getAll(): List<Intent>
 

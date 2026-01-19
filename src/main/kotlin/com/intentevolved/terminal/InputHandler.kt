@@ -161,6 +161,32 @@ class WriteCommand(val defaultFileName: String?) : Command("write") {
     }
 }
 
+class MoveCommand : Command("move") {
+    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+        val parts = args.split(" ")
+
+        if (parts.size != 2) {
+            return CommandResult("Move command requires two intent ids: the intent to move and the new parent id")
+        }
+
+        val intentId = parts[0].toLongOrNull()
+        val newParentId = parts[1].toLongOrNull()
+        
+        return when {
+            intentId == null -> CommandResult("Invalid intent id: ${parts[0]}")
+            newParentId == null -> CommandResult("Invalid parent id: ${parts[1]}")
+            else -> {
+                try {
+                    service.moveParent(intentId, newParentId)
+                    CommandResult("moved intent $intentId to parent $newParentId")
+                } catch (e: IllegalArgumentException) {
+                    CommandResult("Error: ${e.message}")
+                }
+            }
+        }
+    }
+}
+
 // Command registry and executor
 class CommandExecutor(private val service: IntentService, writeFileName: String?) {
     private val commands = listOf(
@@ -168,7 +194,8 @@ class CommandExecutor(private val service: IntentService, writeFileName: String?
         FocusCommand(),
         UpdateCommand(),
         WriteCommand(writeFileName),
-        UpCommand()
+        UpCommand(),
+        MoveCommand()
     )
 
     fun execute(command: String, currentFocalIntent: Long): Pair<String, Long> {

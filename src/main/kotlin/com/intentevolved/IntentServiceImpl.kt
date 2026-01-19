@@ -6,6 +6,7 @@ import com.intentevolved.IntentStream
 import com.intentevolved.IntentStream.Builder as IntentStreamBuilder
 import com.intentevolved.Op
 import com.intentevolved.UpdateIntentText
+import com.intentevolved.UpdateIntentParent
 import com.intentevolved.DeleteIntent
 import com.intentevolved.FulfillIntent
 import java.io.File
@@ -62,6 +63,7 @@ class IntentServiceImpl private constructor(
             when {
                 op.hasCreateIntent() -> handleCreateIntent(op.createIntent)
                 op.hasUpdateIntent() -> handleUpdateIntent(op.updateIntent)
+                op.hasUpdateIntentParent() -> handleUpdateIntentParent(op.updateIntentParent)
                 op.hasDeleteIntent() -> handleDeleteIntent(op.deleteIntent)
                 op.hasFulfillIntent() -> handleFulfillIntent(op.fulfillIntent)
             }
@@ -95,6 +97,31 @@ class IntentServiceImpl private constructor(
             text = update.newText,
             id = update.id,
             parentId = (existing as IntentImpl).parentId,
+            serviceImpl = this
+        )
+        byId[update.id] = updated
+    }
+
+    private fun handleUpdateIntentParent(update: UpdateIntentParent) {
+        val existing = byId[update.id] ?: return
+        val oldParentId = (existing as IntentImpl).parentId
+        
+        // Remove from old parent's children list
+        if (oldParentId != null) {
+            childrenById[oldParentId]?.remove(update.id)
+        }
+        
+        // Add to new parent's children list
+        val newParentId = update.parentId
+        val childList = childrenById.getValue(newParentId)
+        childList.add(update.id)
+        childrenById[newParentId] = childList
+        
+        // Update the intent with new parent
+        val updated = IntentImpl(
+            text = existing.text(),
+            id = update.id,
+            parentId = newParentId,
             serviceImpl = this
         )
         byId[update.id] = updated
@@ -143,6 +170,23 @@ class IntentServiceImpl private constructor(
 
         streamBuilder.addOps(op)
         handleUpdateIntent(updateIntent)
+    }
+
+    override fun moveParent(id: Long, newParentId: Long) {
+        byId[id] ?: throw IllegalArgumentException("No intent with id $id")
+        byId[newParentId] ?: throw IllegalArgumentException("No intent with id $newParentId")
+
+        val updateIntentParent = UpdateIntentParent.newBuilder()
+            .setId(id)
+            .setParentId(newParentId)
+            .build()
+
+        val op = Op.newBuilder()
+            .setUpdateIntentParent(updateIntentParent)
+            .build()
+
+        streamBuilder.addOps(op)
+        handleUpdateIntentParent(updateIntentParent)
     }
 
     override fun getById(id: Long): Intent? = byId[id]

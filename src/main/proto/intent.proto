@@ -25,6 +25,7 @@ message Op {
     UpdateIntentText update_intent = 2;
     DeleteIntent delete_intent = 3;
     FulfillIntent fulfill_intent = 4;
+    UpdateIntentParent update_intent_parent = 5;
   }
 }
 

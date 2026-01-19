@@ -94,4 +94,74 @@ class InputHandlerTest {
         assertEquals("buy eggs", service.getById(1)!!.text())
         assertEquals("updated intent 1", h.commandResult)
     }
+
+    @Test
+    fun `Enter on move command moves intent to new parent`() {
+        val service = IntentServiceImpl.new("testing")
+        val h = InputHandler(service)
+
+        // Create parent intent
+        "add parent intent".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        assertEquals("added intent 1", h.commandResult)
+
+        // Create child intent
+        "add child intent".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        assertEquals("added intent 2", h.commandResult)
+
+        // Move child from root (0) to parent (1)
+        "move 2 1".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        assertEquals("moved intent 2 to parent 1", h.commandResult)
+        
+        // Verify the move worked
+        val child = service.getById(2)!!
+        assertEquals(1L, child.parent()!!.id())
+    }
+
+    @Test
+    fun `Move command with invalid intent id returns error`() {
+        val service = IntentServiceImpl.new("testing")
+        val h = InputHandler(service)
+
+        "move 999 0".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        
+        assertTrue(h.commandResult.contains("Error"))
+        assertTrue(h.commandResult.contains("No intent with id"))
+    }
+
+    @Test
+    fun `Move command with invalid parent id returns error`() {
+        val service = IntentServiceImpl.new("testing")
+        val h = InputHandler(service)
+
+        // Create an intent
+        "add test intent".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+
+        // Try to move to invalid parent
+        "move 1 999".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        
+        assertTrue(h.commandResult.contains("Error"))
+        assertTrue(h.commandResult.contains("No intent with id"))
+    }
+
+    @Test
+    fun `Move command with wrong number of arguments returns error`() {
+        val service = IntentServiceImpl.new("testing")
+        val h = InputHandler(service)
+
+        "move 1".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        
+        assertEquals("Move command requires two intent ids: the intent to move and the new parent id", h.commandResult)
+
+        "move 1 2 3".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        
+        assertEquals("Move command requires two intent ids: the intent to move and the new parent id", h.commandResult)
+    }
 }

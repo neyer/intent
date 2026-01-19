@@ -171,4 +171,46 @@ class IntentServiceImplTest {
         
         assertTrue(scope.ancestry.toIds().contains(parent.id()))
     }
+
+    @Test
+    fun `moveParent moves intent to new parent`() {
+        // Create a hierarchy: root -> parent1 -> child1
+        //                               -> parent2
+        val parent1 = service.addIntent("Parent 1", parentId = 0)
+        val parent2 = service.addIntent("Parent 2", parentId = 0)
+        val child1 = service.addIntent("Child 1", parentId = parent1.id())
+
+        // Verify initial state
+        assertEquals(parent1.id(), child1.parent()!!.id())
+        val scope1 = service.getFocalScope(parent1.id())
+        assertTrue(scope1.children.map { it.id() }.contains(child1.id()))
+
+        // Move child1 from parent1 to parent2
+        service.moveParent(child1.id(), parent2.id())
+
+        // Verify move worked
+        val movedChild = service.getById(child1.id())!!
+        assertEquals(parent2.id(), movedChild.parent()!!.id())
+        
+        val scope2 = service.getFocalScope(parent2.id())
+        assertTrue(scope2.children.map { it.id() }.contains(child1.id()))
+        
+        val scope1After = service.getFocalScope(parent1.id())
+        assertFalse(scope1After.children.map { it.id() }.contains(child1.id()))
+    }
+
+    @Test
+    fun `moveParent throws for invalid intent id`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            service.moveParent(999L, 0L)
+        }
+    }
+
+    @Test
+    fun `moveParent throws for invalid parent id`() {
+        val intent = service.addIntent("Test", parentId = 0)
+        assertThrows(IllegalArgumentException::class.java) {
+            service.moveParent(intent.id(), 999L)
+        }
+    }
 }
