@@ -42,8 +42,19 @@ class IntentServiceImpl private constructor(
     }
 
     private var nextId = 1L
-    private val byId = mutableMapOf<Long, Intent>()
+    private val byId: MutableMap<Long, Intent> = mutableMapOf()
     private val childrenById = mutableMapOf<Long, MutableList<Long>>().withDefault { mutableListOf() }
+
+    init {
+        // we need to add an 'intent' object for the root intent
+        val rootIntentObj = IntentImpl(
+            text = streamBuilder.header.rootIntent,
+            id = 0,
+            parentId = null,
+            serviceImpl = this
+        )
+        byId[0] = rootIntentObj
+    }
 
     private fun replayOps() {
         val stream = streamBuilder.build()
@@ -136,22 +147,17 @@ class IntentServiceImpl private constructor(
 
     override fun getById(id: Long): Intent? = byId[id]
 
-    override fun getRelevant(id: Long): List<Intent> {
-        val intent = byId[id] ?: return emptyList()
-        
-        val relevant = mutableListOf<Intent>()
-        
-        // Add ancestry (all parents)
-        relevant.addAll(intent.getAncestry())
-        
-        // Add the intent itself
-        relevant.add(intent)
-        
+    override fun getFocalScope(id: Long): FocalScope {
+        val intent = byId[id]!!
         // Add immediate children
         val childIds = childrenById[id] ?: emptyList()
-        relevant.addAll(childIds.mapNotNull { childId -> byId[childId] })
+        val children = (childIds.mapNotNull { childId -> byId[childId] })
         
-        return relevant
+        return FocalScope(
+            focus = intent,
+            ancestry = intent.getAncestry(),
+            children = children
+        )
     }
 
     override fun getAll(): List<Intent> = byId.values.toList()

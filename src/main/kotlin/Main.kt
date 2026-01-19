@@ -1,10 +1,10 @@
 package com.intentevolved
-import com.googlecode.lanterna.TerminalSize
+import com.googlecode.lanterna.graphics.TextGraphics
 import com.googlecode.lanterna.input.KeyStroke
-import com.googlecode.lanterna.input.KeyType
 import com.googlecode.lanterna.screen.Screen
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory
 import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.terminal.InputHandler
 
 fun main() {
@@ -27,9 +27,28 @@ fun main() {
 
         val intentOffset = 3
         // Draw rest of application state
-        val intents = service.getAll()
-        intents.forEachIndexed { i, intent ->
-            tg.putString(0, i + intentOffset, "${intent.id()} - ${intent.text()}")
+
+        val scope = service.getFocalScope(handler.focalIntent)
+        // if there are ancestors, put them here
+        var thisRow = intentOffset;
+
+        scope.ancestry.forEachIndexed { ancestorNo, intent ->
+            val spaces = " ".repeat(ancestorNo)
+            renderIntentRow(tg, intent, thisRow, spaces)
+            ++thisRow
+        }
+
+        ++thisRow
+        // then put the intent itself
+        renderIntentRow(tg, scope.focus, thisRow)
+
+
+        ++thisRow
+
+        // then put children
+        scope.children.forEach { intent ->
+            renderIntentRow(tg, intent, thisRow, " ")
+            ++thisRow
         }
 
         screen.refresh()
@@ -45,4 +64,8 @@ fun main() {
     }
 
     screen.stopScreen()
+}
+
+fun renderIntentRow(tg: TextGraphics, intent: Intent, row: Int, prefix: String="") {
+    tg.putString(0, row, "$prefix${intent.id()} - ${intent.text()}")
 }

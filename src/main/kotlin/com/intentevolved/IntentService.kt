@@ -17,7 +17,7 @@ interface IntentService {
     // gets intent objects directly relevant to this one
     // - ancestry path
     // - immediate children
-    fun getRelevant(id: Long): List<Intent>
+    fun getFocalScope(id: Long): FocalScope
 
     fun writeToFile(fileName: String)
 }

@@ -8,4 +8,6 @@ x give intent service the ability to give a path to an intent
  . we also want sibling intents
 
 
-* add a nested intent in the ui
+x add a nested intent in the ui
+
+* add caching on the focal intents so we don't recompute it constantly
