@@ -9,6 +9,7 @@ import com.intentevolved.com.intentevolved.terminal.InputHandler
 
 fun main() {
     val terminalFactory = DefaultTerminalFactory()
+    terminalFactory.setForceTextTerminal(true)
     val screen: Screen = terminalFactory.createScreen()
     screen.startScreen()
 

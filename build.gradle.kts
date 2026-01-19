@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "2.2.0"
     id("com.google.protobuf") version "0.9.4"
+    application
 }
 
 group = "com.intentevolved"
@@ -32,4 +33,15 @@ protobuf {
 
 kotlin {
     jvmToolchain(21)
+}
+
+application {
+    mainClass.set("com.intentevolved.MainKt")
+}
+
+// Task to print runtime classpath for use in shell scripts
+tasks.register("printRuntimeClasspath") {
+    doLast {
+        println(sourceSets["main"].runtimeClasspath.asPath)
+    }
 }
