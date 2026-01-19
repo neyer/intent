@@ -9,13 +9,13 @@ import com.intentevolved.com.intentevolved.terminal.InputHandler
 
 fun main() {
     val terminalFactory = DefaultTerminalFactory()
-    terminalFactory.setForceTextTerminal(true)
     val screen: Screen = terminalFactory.createScreen()
     screen.startScreen()
 
     // todo: make this come from args
-    val service = IntentServiceImpl.fromFile("current.pb")
-    val handler = InputHandler(service)
+    val fileName = "current.pb"
+    val service = IntentServiceImpl.fromFile(fileName)
+    val handler = InputHandler(service, fileName)
 
     while (handler.keepGoing) {
         // Clear screen

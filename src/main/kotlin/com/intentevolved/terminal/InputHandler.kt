@@ -5,7 +5,8 @@ import com.googlecode.lanterna.input.KeyType
 import com.intentevolved.com.intentevolved.IntentService
 
 class InputHandler(
-    val service: IntentService
+    val service: IntentService,
+    val fileName: String?  = null//
 ) {
     val inputBuffer = StringBuilder()
 
@@ -16,7 +17,7 @@ class InputHandler(
     // it's the default parent for all new intents
     var focalIntent: Long = 0
 
-    val executor = CommandExecutor(service)
+    val executor = CommandExecutor(service, fileName)
 
     fun handleKeyStroke(key: KeyStroke)  {
 
@@ -63,7 +64,7 @@ abstract class Command(val keyword: String) {
     fun matches(command: String): Boolean = command == keyword || command.startsWith("$keyword ")
 
     fun extractArgs(command: String): String =
-        command.removePrefix("$keyword ").trim()
+        command.removePrefix(keyword).trim()
 }
 
 // Result wrapper to handle both output and state changes
@@ -137,20 +138,26 @@ class UpdateCommand : Command("update") {
     }
 }
 
-class WriteCommand : Command("write") {
+class WriteCommand(val defaultFileName: String?) : Command("write") {
     override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
-        service.writeToFile(args)
-        return CommandResult("wrote to file: $args")
+        val fileName = args.ifEmpty {
+            if (defaultFileName == null) {
+                return CommandResult("Error: No filename specified and no file was loaded")
+            }
+            defaultFileName
+        }
+        service.writeToFile(fileName)
+        return CommandResult("wrote to file: $fileName")
     }
 }
 
 // Command registry and executor
-class CommandExecutor(private val service: IntentService) {
+class CommandExecutor(private val service: IntentService, writeFileName: String?) {
     private val commands = listOf(
         AddCommand(),
         FocusCommand(),
         UpdateCommand(),
-        WriteCommand(),
+        WriteCommand(writeFileName),
         UpCommand()
     )
 
