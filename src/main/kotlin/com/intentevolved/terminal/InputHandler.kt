@@ -4,6 +4,11 @@ import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
 import com.intentevolved.com.intentevolved.IntentService
 
+enum class RedrawType {
+    FULL_SCREEN,
+    INPUT_LINE_ONLY
+}
+
 class InputHandler(
     val service: IntentService,
     val fileName: String?  = null//
@@ -19,21 +24,26 @@ class InputHandler(
 
     val executor = CommandExecutor(service, fileName)
 
-    fun handleKeyStroke(key: KeyStroke)  {
+    fun handleKeyStroke(key: KeyStroke): RedrawType {
 
         when (key.keyType) {
             KeyType.Enter -> {
                 keepGoing = handleEnter()
+                return RedrawType.FULL_SCREEN
             }
             KeyType.Backspace -> {
                 if (inputBuffer.isNotEmpty()) {
                     inputBuffer.deleteCharAt(inputBuffer.length - 1)
                 }
+                return RedrawType.INPUT_LINE_ONLY
             }
             KeyType.Character -> {
                 inputBuffer.append(key.character)
+                return RedrawType.INPUT_LINE_ONLY
             }
-            else -> {}
+            else -> {
+                return RedrawType.INPUT_LINE_ONLY
+            }
         }
     }
 
