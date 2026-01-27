@@ -9,6 +9,7 @@ import com.intentevolved.UpdateIntentText
 import com.intentevolved.UpdateIntentParent
 import com.intentevolved.DeleteIntent
 import com.intentevolved.FulfillIntent
+import java.time.Instant
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -17,6 +18,11 @@ class IntentServiceImpl private constructor(
     private val streamBuilder: IntentStreamBuilder
 ) : IntentService {
     companion object {
+        private fun currentEpochNanos(): Long {
+            val now = Instant.now()
+            return now.epochSecond * 1_000_000_000L + now.nano.toLong()
+        }
+
         fun fromFile(fileName: String): IntentServiceImpl {
             val streamBuilder = streamBuilderFromFile(fileName)
             val service = IntentServiceImpl(streamBuilder)
@@ -34,7 +40,22 @@ class IntentServiceImpl private constructor(
             val file = File(fileName)
             return if (file.exists()) {
                 FileInputStream(file).use { input ->
-                    IntentStream.parseFrom(input).toBuilder()
+                    val parsed = IntentStream.parseFrom(input)
+                    val builder = parsed.toBuilder()
+
+                    // Ensure all create_intent ops have a timestamp_epoch_nanos set.
+                    // For any existing ops without a timestamp, assign the current time.
+                    for (i in 0 until builder.opsCount) {
+                        val op = builder.getOps(i)
+                        if (op.hasCreateIntent() && !op.hasTimestampEpochNanos()) {
+                            val updatedOp = op.toBuilder()
+                                .setTimestampEpochNanos(currentEpochNanos())
+                                .build()
+                            builder.setOps(i, updatedOp)
+                        }
+                    }
+
+                    builder
                 }
             } else {
                 throw IllegalArgumentException("No such file $fileName")
@@ -61,21 +82,22 @@ class IntentServiceImpl private constructor(
         val stream = streamBuilder.build()
         stream.opsList.forEach { op ->
             when {
-                op.hasCreateIntent() -> handleCreateIntent(op.createIntent)
-                op.hasUpdateIntent() -> handleUpdateIntent(op.updateIntent)
-                op.hasUpdateIntentParent() -> handleUpdateIntentParent(op.updateIntentParent)
+                op.hasCreateIntent() -> handleCreateIntent(op.createIntent, op.timestampEpochNanos)
+                op.hasUpdateIntent() -> handleUpdateIntent(op.updateIntent, op.timestampEpochNanos)
+                op.hasUpdateIntentParent() -> handleUpdateIntentParent(op.updateIntentParent, op.timestampEpochNanos)
                 op.hasDeleteIntent() -> handleDeleteIntent(op.deleteIntent)
                 op.hasFulfillIntent() -> handleFulfillIntent(op.fulfillIntent)
             }
         }
     }
 
-    private fun handleCreateIntent(create: CreateIntent) {
+    private fun handleCreateIntent(create: CreateIntent, timestamp: Long?) {
         val intent = IntentImpl(
             text = create.text,
             id = create.id,
             parentId = if (create.hasParentId()) create.parentId else null,
-            serviceImpl = this
+            serviceImpl = this,
+            createdTimestamp = timestamp,
         )
         byId[create.id] = intent
         if (intent.parentId != null) {
@@ -91,18 +113,20 @@ class IntentServiceImpl private constructor(
         }
     }
 
-    private fun handleUpdateIntent(update: UpdateIntentText) {
+    private fun handleUpdateIntent(update: UpdateIntentText, timestamp: Long?) {
         val existing = byId[update.id] ?: return
         val updated = IntentImpl(
             text = update.newText,
             id = update.id,
             parentId = (existing as IntentImpl).parentId,
-            serviceImpl = this
+            serviceImpl = this,
+            createdTimestamp = existing.createdTimestamp(),
+            lastUpdatedTimestamp = timestamp
         )
         byId[update.id] = updated
     }
 
-    private fun handleUpdateIntentParent(update: UpdateIntentParent) {
+    private fun handleUpdateIntentParent(update: UpdateIntentParent, timestamp: Long?) {
         val existing = byId[update.id] ?: return
         val oldParentId = (existing as IntentImpl).parentId
         
@@ -122,6 +146,8 @@ class IntentServiceImpl private constructor(
             text = existing.text(),
             id = update.id,
             parentId = newParentId,
+            createdTimestamp = existing.createdTimestamp(),
+            lastUpdatedTimestamp = timestamp,
             serviceImpl = this
         )
         byId[update.id] = updated
@@ -146,12 +172,14 @@ class IntentServiceImpl private constructor(
             .setParentId(parentId)
             .build()
 
+        val timestamp = currentEpochNanos()
         val op = Op.newBuilder()
             .setCreateIntent(createIntent)
+            .setTimestampEpochNanos(timestamp)
             .build()
 
         streamBuilder.addOps(op)
-        handleCreateIntent(createIntent)
+        handleCreateIntent(createIntent, timestamp)
 
         return byId[createIntent.id]!!
     }
@@ -164,12 +192,15 @@ class IntentServiceImpl private constructor(
             .setNewText(newText)
             .build()
 
+        val timestamp = currentEpochNanos()
+
         val op = Op.newBuilder()
             .setUpdateIntent(updateIntent)
+            .setTimestampEpochNanos(timestamp)
             .build()
 
         streamBuilder.addOps(op)
-        handleUpdateIntent(updateIntent)
+        handleUpdateIntent(updateIntent, timestamp)
     }
 
     override fun moveParent(id: Long, newParentId: Long) {
@@ -181,12 +212,15 @@ class IntentServiceImpl private constructor(
             .setParentId(newParentId)
             .build()
 
+
+        val timestamp = currentEpochNanos()
         val op = Op.newBuilder()
             .setUpdateIntentParent(updateIntentParent)
+            .setTimestampEpochNanos(timestamp)
             .build()
 
         streamBuilder.addOps(op)
-        handleUpdateIntentParent(updateIntentParent)
+        handleUpdateIntentParent(updateIntentParent, timestamp)
     }
 
     override fun getById(id: Long): Intent? = byId[id]
@@ -223,10 +257,14 @@ class IntentImpl(
     private val text: String,
     private val id: Long,
     internal val parentId: Long? = null,
-    private val serviceImpl: IntentServiceImpl
+    private val serviceImpl: IntentServiceImpl,
+    private val createdTimestamp: Long? = null,
+    private val lastUpdatedTimestamp: Long? = null
 ) : Intent {
     override fun text() = text
     override fun id() = id
     override fun parent() = if (parentId == null) null else serviceImpl.getById(parentId)
     override fun children(): List<Intent> = listOf()
+    override fun createdTimestamp() = createdTimestamp
+    override fun lastUpdatedTimestamp() = lastUpdatedTimestamp
 }

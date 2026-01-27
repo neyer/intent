@@ -9,6 +9,9 @@ import com.intentevolved.com.intentevolved.IntentServiceImpl
 import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.terminal.InputHandler
 import com.intentevolved.com.intentevolved.terminal.RedrawType
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 fun main() {
     val terminalFactory = DefaultTerminalFactory()
@@ -92,5 +95,17 @@ fun clearLine(tg: TextGraphics, row: Int) {
 }
 
 fun renderIntentRow(tg: TextGraphics, intent: Intent, row: Int, prefix: String="") {
-    tg.putString(0, row, "$prefix${intent.id()} - ${intent.text()}")
+    val epochNanos = intent.lastUpdatedTimestamp() ?: intent.createdTimestamp()
+    val timestamp = epochNanos?.let { formatEpochNanosAsLocalMinute(it) } ?: "unknown time"
+    tg.putString(0, row, "$prefix${intent.id()} - ${intent.text()} (at $timestamp)")
+}
+
+private val INTENT_TIME_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm").withZone(ZoneId.systemDefault())
+
+private fun formatEpochNanosAsLocalMinute(epochNanos: Long): String {
+    // epoch_nanos -> Instant -> local formatted time
+    val seconds = Math.floorDiv(epochNanos, 1_000_000_000L)
+    val nanos = Math.floorMod(epochNanos, 1_000_000_000L).toInt()
+    return INTENT_TIME_FORMATTER.format(Instant.ofEpochSecond(seconds, nanos.toLong()))
 }

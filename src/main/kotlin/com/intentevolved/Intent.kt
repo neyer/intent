@@ -6,6 +6,10 @@ interface Intent {
 
     fun id(): Long
 
+    fun createdTimestamp(): Long?
+
+    fun lastUpdatedTimestamp(): Long?
+
     fun parent(): Intent?
 
     fun children(): List<Intent>

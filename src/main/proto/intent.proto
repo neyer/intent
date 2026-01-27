@@ -27,6 +27,8 @@ message Op {
     FulfillIntent fulfill_intent = 4;
     UpdateIntentParent update_intent_parent = 5;
   }
+  // bump field numbers up here to leave space for more messages
+  optional int64 timestamp_epoch_nanos = 1000;
 }
 
 message CreateIntent {
