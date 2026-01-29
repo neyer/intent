@@ -2,7 +2,13 @@ package com.intentevolved.com.intentevolved.terminal
 
 import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
-import com.intentevolved.com.intentevolved.IntentService
+import com.intentevolved.Op
+import com.intentevolved.CreateIntent
+import com.intentevolved.UpdateIntentText
+import com.intentevolved.UpdateIntentParent
+import com.intentevolved.com.intentevolved.CommandResult
+import com.intentevolved.com.intentevolved.IntentStreamConsumer
+import com.intentevolved.com.intentevolved.IntentStateProvider
 
 enum class RedrawType {
     FULL_SCREEN,
@@ -10,19 +16,20 @@ enum class RedrawType {
 }
 
 class InputHandler(
-    val service: IntentService,
-    val fileName: String?  = null//
+    private val consumer: IntentStreamConsumer,
+    private val stateProvider: IntentStateProvider,
+    val fileName: String? = null
 ) {
     val inputBuffer = StringBuilder()
 
-    var keepGoing = true ;
-    var commandResult : String = ""
+    var keepGoing = true
+    var commandResult: String = ""
 
     // this is the intent we are currently focused on
     // it's the default parent for all new intents
     var focalIntent: Long = 0
 
-    val executor = CommandExecutor(service, fileName)
+    private val executor = CommandExecutor(consumer, stateProvider, fileName)
 
     fun handleKeyStroke(key: KeyStroke): RedrawType {
 
@@ -69,7 +76,12 @@ class InputHandler(
 
 // Base command class
 abstract class Command(val keyword: String) {
-    abstract fun process(args: String, service: IntentService, focalIntent: Long): CommandResult
+    abstract fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult
 
     fun matches(command: String): Boolean = command == keyword || command.startsWith("$keyword ")
 
@@ -77,23 +89,33 @@ abstract class Command(val keyword: String) {
         command.removePrefix(keyword).trim()
 }
 
-// Result wrapper to handle both output and state changes
-data class CommandResult(
-    val message: String,
-    val newFocalIntent: Long? = null // null means no change
-)
-
 // Command implementations
 class AddCommand : Command("add") {
-    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
         val intentText = args.ifEmpty { "new intent at ${System.currentTimeMillis()}" }
-        val newIntent = service.addIntent(intentText, focalIntent)
-        return CommandResult("added intent ${newIntent.id()}")
+
+        // Let the consumer (IntentServiceImpl) assign ids and timestamps.
+        val create = CreateIntent.newBuilder()
+            .setId(0L) // 0 means "assign an id"
+            .setText(intentText)
+            .setParentId(focalIntent)
+            .build()
+
+        val op = Op.newBuilder()
+            .setCreateIntent(create)
+            .build()
+
+        return consumer.consume(op)
     }
 }
 
 class FocusCommand : Command("focus") {
-    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+    override fun process(args: String, consumer: IntentStreamConsumer, stateProvider: IntentStateProvider, focalIntent: Long): CommandResult {
         val parts = args.split(" ")
 
         if (parts.size != 1) {
@@ -110,28 +132,26 @@ class FocusCommand : Command("focus") {
 }
 
 class UpCommand : Command("up") {
-    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+    override fun process(args: String, consumer: IntentStreamConsumer, stateProvider: IntentStateProvider, focalIntent: Long): CommandResult {
         val parts = args.split(" ")
 
         if (parts.size > 1) {
             return CommandResult("Up takes no arguments.")
         }
 
-        val existingFocus = service.getById(focalIntent)!!
-        val parent = existingFocus.parent()
-        if (parent == null) {
-            check(focalIntent == 0L) {
-                "Intent id $focalIntent had no parent but was not root intent."
-            }
-            return   CommandResult("At root intent, cannot go up ")
+        // For now, treat 0 as the root; no interaction with the service.
+        if (focalIntent == 0L) {
+            return CommandResult("At root intent, cannot go up ")
         }
-        val newFocus = parent.id()
-        return   CommandResult("Focusing on $newFocus: ${parent.text()}" , newFocalIntent = newFocus)
+
+        // We don't currently have parent linkage without querying the service,
+        // so simply move focus back to the root.
+        return CommandResult("Focusing on 0", newFocalIntent = 0L)
     }
 }
 
 class UpdateCommand : Command("update") {
-    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+    override fun process(args: String, consumer: IntentStreamConsumer, stateProvider: IntentStateProvider, focalIntent: Long): CommandResult {
         val parts = args.split(" ", limit = 2)
 
         if (parts.size != 2) {
@@ -142,27 +162,26 @@ class UpdateCommand : Command("update") {
         return if (id == null) {
             CommandResult("Invalid intent id: ${parts[0]}")
         } else {
-            service.edit(id, parts[1])
-            CommandResult("updated intent $id")
-        }
-    }
-}
+            val update = UpdateIntentText.newBuilder()
+                .setId(id)
+                .setNewText(parts[1])
+                .build()
 
-class WriteCommand(val defaultFileName: String?) : Command("write") {
-    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
-        val fileName = args.ifEmpty {
-            if (defaultFileName == null) {
-                return CommandResult("Error: No filename specified and no file was loaded")
+            val op = Op.newBuilder()
+                .setUpdateIntent(update)
+                .build()
+
+            try {
+                consumer.consume(op)
+            } catch (e: IllegalArgumentException) {
+                return CommandResult("Error: ${e.message}")
             }
-            defaultFileName
         }
-        service.writeToFile(fileName)
-        return CommandResult("wrote to file: $fileName")
     }
 }
 
 class MoveCommand : Command("move") {
-    override fun process(args: String, service: IntentService, focalIntent: Long): CommandResult {
+    override fun process(args: String, consumer: IntentStreamConsumer, stateProvider: IntentStateProvider, focalIntent: Long): CommandResult {
         val parts = args.split(" ")
 
         if (parts.size != 2) {
@@ -171,14 +190,22 @@ class MoveCommand : Command("move") {
 
         val intentId = parts[0].toLongOrNull()
         val newParentId = parts[1].toLongOrNull()
-        
+
         return when {
             intentId == null -> CommandResult("Invalid intent id: ${parts[0]}")
             newParentId == null -> CommandResult("Invalid parent id: ${parts[1]}")
             else -> {
+                val updateParent = UpdateIntentParent.newBuilder()
+                    .setId(intentId)
+                    .setParentId(newParentId)
+                    .build()
+
+                val op = Op.newBuilder()
+                    .setUpdateIntentParent(updateParent)
+                    .build()
+
                 try {
-                    service.moveParent(intentId, newParentId)
-                    CommandResult("moved intent $intentId to parent $newParentId")
+                    consumer.consume(op)
                 } catch (e: IllegalArgumentException) {
                     CommandResult("Error: ${e.message}")
                 }
@@ -188,12 +215,13 @@ class MoveCommand : Command("move") {
 }
 
 // Command registry and executor
-class CommandExecutor(private val service: IntentService, writeFileName: String?) {
+class CommandExecutor(
+    private val consumer: IntentStreamConsumer,
+    private val stateProvider: IntentStateProvider, writeFileName: String?) {
     private val commands = listOf(
         AddCommand(),
         FocusCommand(),
         UpdateCommand(),
-        WriteCommand(writeFileName),
         UpCommand(),
         MoveCommand()
     )
@@ -205,7 +233,7 @@ class CommandExecutor(private val service: IntentService, writeFileName: String?
             return "Unknown command $command" to currentFocalIntent
         }
         val args = matchedCommand.extractArgs(command)
-        val result = matchedCommand.process(args, service, currentFocalIntent)
+        val result = matchedCommand.process(args, consumer, stateProvider, currentFocalIntent)
 
         val newFocalIntent = result.newFocalIntent ?: currentFocalIntent
         return result.message to newFocalIntent

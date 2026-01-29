@@ -19,7 +19,7 @@ class InputHandlerTest {
     @Test
     fun `Character appends to inputBuffer`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         h.handleKeyStroke(ch('a'))
         h.handleKeyStroke(ch('b'))
@@ -31,7 +31,7 @@ class InputHandlerTest {
     @Test
     fun `Backspace removes last char when buffer non-empty`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         h.handleKeyStroke(ch('a'))
         h.handleKeyStroke(ch('b'))
@@ -43,7 +43,7 @@ class InputHandlerTest {
     @Test
     fun `Backspace on empty buffer does nothing`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         h.handleKeyStroke(backspace())
 
@@ -53,7 +53,7 @@ class InputHandlerTest {
     @Test
     fun `Enter on exit command sets keepGoing false and clears buffer`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         "exit".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
@@ -66,7 +66,7 @@ class InputHandlerTest {
     @Test
     fun `Enter on add command calls service and sets commandResult`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         "add buy milk".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
@@ -80,7 +80,7 @@ class InputHandlerTest {
     @Test
     fun `Enter on update command calls edit and sets commandResult`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         "add buy milk".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
@@ -98,7 +98,7 @@ class InputHandlerTest {
     @Test
     fun `Enter on move command moves intent to new parent`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         // Create parent intent
         "add parent intent".forEach { h.handleKeyStroke(ch(it)) }
@@ -123,7 +123,7 @@ class InputHandlerTest {
     @Test
     fun `Move command with invalid intent id returns error`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         "move 999 0".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
@@ -135,7 +135,7 @@ class InputHandlerTest {
     @Test
     fun `Move command with invalid parent id returns error`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         // Create an intent
         "add test intent".forEach { h.handleKeyStroke(ch(it)) }
@@ -152,7 +152,7 @@ class InputHandlerTest {
     @Test
     fun `Move command with wrong number of arguments returns error`() {
         val service = IntentServiceImpl.new("testing")
-        val h = InputHandler(service)
+        val h = InputHandler(service,service)
 
         "move 1".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())

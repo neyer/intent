@@ -21,7 +21,7 @@ fun main() {
     // todo: make this come from args
     val fileName = "current.pb"
     val service = IntentServiceImpl.fromFile(fileName)
-    val handler = InputHandler(service, fileName)
+    val handler = InputHandler(service, service, fileName)
 
     // Initial full screen draw
     drawFullScreen(screen, handler, service)

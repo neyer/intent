@@ -1,7 +1,6 @@
 package com.intentevolved.com.intentevolved
 
 import com.intentevolved.CreateIntent
-import com.intentevolved.Header
 import com.intentevolved.IntentStream
 import com.intentevolved.IntentStream.Builder as IntentStreamBuilder
 import com.intentevolved.Op
@@ -16,7 +15,7 @@ import java.io.FileOutputStream
 
 class IntentServiceImpl private constructor(
     private val streamBuilder: IntentStreamBuilder
-) : IntentService {
+) : IntentService, IntentStreamConsumer, IntentStateProvider {
     companion object {
         private fun currentEpochNanos(): Long {
             val now = Instant.now()
@@ -163,6 +162,122 @@ class IntentServiceImpl private constructor(
 
     private fun handleFulfillIntent(fulfill: FulfillIntent) {
         // TODO: Handle fulfillment logic when you implement it
+    }
+
+    /**
+     * Implementation of the IntentStreamConsumer contract.
+     *
+     * This is the single place where raw Ops are accepted from the outside
+     * (e.g. the terminal input handler). It normalizes ids and timestamps,
+     * validates references, appends the op to the stream, and updates the
+     * in‑memory model using the existing handle* helpers.
+     */
+    override fun consume(op: Op): CommandResult {
+        // Ensure we always have a timestamp on persisted ops.
+        val timestamp =
+            if (op.hasTimestampEpochNanos()) op.timestampEpochNanos
+            else currentEpochNanos()
+
+        val finalizedOp = when {
+            op.hasCreateIntent() -> {
+                val original = op.createIntent
+
+                // If id is 0, treat it as "please assign an id".
+                val idToUse =
+                    if (original.id == 0L) {
+                        val assigned = nextId
+                        nextId = assigned + 1
+                        assigned
+                    } else {
+                        if (original.id >= nextId) {
+                            nextId = original.id + 1
+                        }
+                        original.id
+                    }
+
+                val create = original.toBuilder()
+                    .setId(idToUse)
+                    .build()
+
+                op.toBuilder()
+                    .setCreateIntent(create)
+                    .setTimestampEpochNanos(timestamp)
+                    .build()
+            }
+
+            op.hasUpdateIntent() -> {
+                val update = op.updateIntent
+                // Match the validation behavior of edit()
+                byId[update.id] ?: throw IllegalArgumentException("No intent with id ${update.id}")
+
+                op.toBuilder()
+                    .setTimestampEpochNanos(timestamp)
+                    .build()
+            }
+
+            op.hasUpdateIntentParent() -> {
+                val updateParent = op.updateIntentParent
+
+                // Match the validation behavior of moveParent()
+                byId[updateParent.id] ?: throw IllegalArgumentException("No intent with id ${updateParent.id}")
+                byId[updateParent.parentId] ?: throw IllegalArgumentException("No intent with id ${updateParent.parentId}")
+
+                op.toBuilder()
+                    .setTimestampEpochNanos(timestamp)
+                    .build()
+            }
+
+            op.hasDeleteIntent() || op.hasFulfillIntent() -> {
+                op.toBuilder()
+                    .setTimestampEpochNanos(timestamp)
+                    .build()
+            }
+
+            else -> {
+                throw IllegalArgumentException("Op has no payload")
+            }
+        }
+
+        // Persist to the underlying stream.
+        streamBuilder.addOps(finalizedOp)
+
+        // Apply to in‑memory model and build a user‑facing result.
+        return when {
+            finalizedOp.hasCreateIntent() -> {
+                val create = finalizedOp.createIntent
+                handleCreateIntent(create, timestamp)
+                CommandResult("added intent ${create.id}")
+            }
+
+            finalizedOp.hasUpdateIntent() -> {
+                val update = finalizedOp.updateIntent
+                handleUpdateIntent(update, timestamp)
+                CommandResult("updated intent ${update.id}")
+            }
+
+            finalizedOp.hasUpdateIntentParent() -> {
+                val updateParent = finalizedOp.updateIntentParent
+                handleUpdateIntentParent(updateParent, timestamp)
+                CommandResult("moved intent ${updateParent.id} to parent ${updateParent.parentId}")
+            }
+
+            finalizedOp.hasDeleteIntent() -> {
+                val delete = finalizedOp.deleteIntent
+                handleDeleteIntent(delete)
+                CommandResult("deleted intent ${delete.id}")
+            }
+
+            finalizedOp.hasFulfillIntent() -> {
+                val fulfill = finalizedOp.fulfillIntent
+                handleFulfillIntent(fulfill)
+                CommandResult("fulfilled intent ${fulfill.id}")
+            }
+
+            else -> {
+                // Should be unreachable given the earlier checks.
+                throw IllegalStateException("Finalized op has no payload")
+            }
+        }
     }
 
     override fun addIntent(text: String, parentId: Long): Intent {
