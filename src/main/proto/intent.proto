@@ -30,15 +30,17 @@ message Op {
     SetFieldValue set_field_value = 7;
   }
   // bump field numbers up here to leave space for more messages
+
+  // Unique id for this op (the op is also an intent)
+  int64 id = 100;
   optional int64 timestamp_epoch_nanos = 1000;
 }
 
 message CreateIntent {
-  int64 id = 1; // this will be provided by the service
-  string text = 2;
+  string text = 1;
   // having a parent is optional
   // if you don't explicitly specify a parent, the 'root' intent is the parent
-  optional int64 parentId = 3;
+  optional int64 parentId = 2;
 }
 
 message UpdateIntentText {

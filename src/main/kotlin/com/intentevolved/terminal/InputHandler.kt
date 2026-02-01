@@ -104,7 +104,6 @@ class AddCommand : Command("add") {
 
         // Let the consumer (IntentServiceImpl) assign ids and timestamps.
         val create = CreateIntent.newBuilder()
-            .setId(0L) // 0 means "assign an id"
             .setText(intentText)
             .setParentId(focalIntent)
             .build()

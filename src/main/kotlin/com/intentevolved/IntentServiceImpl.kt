@@ -75,7 +75,8 @@ class IntentServiceImpl private constructor(
             text = streamBuilder.header.rootIntent,
             id = 0,
             parentId = null,
-            serviceImpl = this
+            serviceImpl = this,
+            isMeta = false
         )
         byId[0] = rootIntentObj
     }
@@ -83,8 +84,13 @@ class IntentServiceImpl private constructor(
     private fun replayOps() {
         val stream = streamBuilder.build()
         stream.opsList.forEach { op ->
+            // Track the highest id we've seen
+            if (op.id >= nextId) {
+                nextId = op.id + 1
+            }
+
             when {
-                op.hasCreateIntent() -> handleCreateIntent(op.createIntent, op.timestampEpochNanos)
+                op.hasCreateIntent() -> handleCreateIntent(op.id, op.createIntent, op.timestampEpochNanos)
                 op.hasUpdateIntent() -> handleUpdateIntent(op.updateIntent, op.timestampEpochNanos)
                 op.hasUpdateIntentParent() -> handleUpdateIntentParent(op.updateIntentParent, op.timestampEpochNanos)
                 op.hasDeleteIntent() -> handleDeleteIntent(op.deleteIntent)
@@ -92,59 +98,109 @@ class IntentServiceImpl private constructor(
                 op.hasAddField() -> handleAddField(op.addField)
                 op.hasSetFieldValue() -> handleSetFieldValue(op.setFieldValue)
             }
+
+            // Create meta-intent for non-CreateIntent ops (CreateIntent already creates its intent)
+            if (!op.hasCreateIntent()) {
+                createMetaIntentForOp(op)
+            }
         }
     }
 
-    private fun handleCreateIntent(create: CreateIntent, timestamp: Long?) {
-        val intent = IntentImpl(
-            text = create.text,
-            id = create.id,
-            parentId = if (create.hasParentId()) create.parentId else null,
+    private fun createMetaIntentForOp(op: Op): Intent {
+        val id = op.id
+        val parentId = getTargetIntentId(op)
+        val text = describeOp(op)
+        val timestamp = if (op.hasTimestampEpochNanos()) op.timestampEpochNanos else null
+
+        val metaIntent = IntentImpl(
+            text = text,
+            id = id,
+            parentId = parentId,
             serviceImpl = this,
             createdTimestamp = timestamp,
+            isMeta = true
         )
-        byId[create.id] = intent
-        if (intent.parentId != null) {
-            // link this child to its parent
-            val childList = childrenById.getValue(intent.parentId)
-            childList.add(create.id)
-            childrenById[intent.parentId] = childList
+        byId[id] = metaIntent
+        return metaIntent
+    }
+
+    private fun getTargetIntentId(op: Op): Long? {
+        return when {
+            op.hasUpdateIntent() -> op.updateIntent.id
+            op.hasUpdateIntentParent() -> op.updateIntentParent.id
+            op.hasDeleteIntent() -> op.deleteIntent.id
+            op.hasFulfillIntent() -> op.fulfillIntent.id
+            op.hasAddField() -> op.addField.intentId
+            op.hasSetFieldValue() -> op.setFieldValue.intentId
+            else -> null
         }
+    }
 
+    private fun describeOp(op: Op): String {
+        return when {
+            op.hasCreateIntent() -> "CreateIntent: ${op.createIntent.text}"
+            op.hasUpdateIntent() -> "UpdateIntentText: ${op.updateIntent.newText}"
+            op.hasUpdateIntentParent() -> "UpdateIntentParent: move to ${op.updateIntentParent.parentId}"
+            op.hasDeleteIntent() -> "DeleteIntent"
+            op.hasFulfillIntent() -> "FulfillIntent"
+            op.hasAddField() -> "AddField: ${op.addField.fieldName}"
+            op.hasSetFieldValue() -> "SetFieldValue: ${op.setFieldValue.fieldName}"
+            else -> "UnknownOp"
+        }
+    }
 
-        if (create.id >= nextId) {
-            nextId = create.id + 1
+    private fun handleCreateIntent(id: Long, create: CreateIntent, timestamp: Long?) {
+        val parentId = if (create.hasParentId()) create.parentId else null
+        val intent = IntentImpl(
+            text = create.text,
+            id = id,
+            parentId = parentId,
+            serviceImpl = this,
+            createdTimestamp = timestamp,
+            isMeta = false
+        )
+        byId[id] = intent
+        if (parentId != null) {
+            // link this child to its parent
+            val childList = childrenById.getValue(parentId)
+            childList.add(id)
+            childrenById[parentId] = childList
         }
     }
 
     private fun handleUpdateIntent(update: UpdateIntentText, timestamp: Long?) {
         val existing = byId[update.id] ?: return
+        val existingImpl = existing as IntentImpl
         val updated = IntentImpl(
             text = update.newText,
             id = update.id,
-            parentId = (existing as IntentImpl).parentId,
+            parentId = existingImpl.parentId,
             serviceImpl = this,
             createdTimestamp = existing.createdTimestamp(),
-            lastUpdatedTimestamp = timestamp
+            lastUpdatedTimestamp = timestamp,
+            fields = existingImpl.fields().toMutableMap(),
+            values = existingImpl.fieldValues().toMutableMap(),
+            isMeta = existing.isMeta()
         )
         byId[update.id] = updated
     }
 
     private fun handleUpdateIntentParent(update: UpdateIntentParent, timestamp: Long?) {
         val existing = byId[update.id] ?: return
-        val oldParentId = (existing as IntentImpl).parentId
-        
+        val existingImpl = existing as IntentImpl
+        val oldParentId = existingImpl.parentId
+
         // Remove from old parent's children list
         if (oldParentId != null) {
             childrenById[oldParentId]?.remove(update.id)
         }
-        
+
         // Add to new parent's children list
         val newParentId = update.parentId
         val childList = childrenById.getValue(newParentId)
         childList.add(update.id)
         childrenById[newParentId] = childList
-        
+
         // Update the intent with new parent
         val updated = IntentImpl(
             text = existing.text(),
@@ -152,7 +208,10 @@ class IntentServiceImpl private constructor(
             parentId = newParentId,
             createdTimestamp = existing.createdTimestamp(),
             lastUpdatedTimestamp = timestamp,
-            serviceImpl = this
+            serviceImpl = this,
+            fields = existingImpl.fields().toMutableMap(),
+            values = existingImpl.fieldValues().toMutableMap(),
+            isMeta = existing.isMeta()
         )
         byId[update.id] = updated
     }
@@ -253,29 +312,14 @@ class IntentServiceImpl private constructor(
             if (op.hasTimestampEpochNanos()) op.timestampEpochNanos
             else currentEpochNanos()
 
+        // Assign id for this op
+        val id = nextId
+        nextId = id + 1
+
         val finalizedOp = when {
             op.hasCreateIntent() -> {
-                val original = op.createIntent
-
-                // If id is 0, treat it as "please assign an id".
-                val idToUse =
-                    if (original.id == 0L) {
-                        val assigned = nextId
-                        nextId = assigned + 1
-                        assigned
-                    } else {
-                        if (original.id >= nextId) {
-                            nextId = original.id + 1
-                        }
-                        original.id
-                    }
-
-                val create = original.toBuilder()
-                    .setId(idToUse)
-                    .build()
-
                 op.toBuilder()
-                    .setCreateIntent(create)
+                    .setId(id)
                     .setTimestampEpochNanos(timestamp)
                     .build()
             }
@@ -286,6 +330,7 @@ class IntentServiceImpl private constructor(
                 byId[update.id] ?: throw IllegalArgumentException("No intent with id ${update.id}")
 
                 op.toBuilder()
+                    .setId(id)
                     .setTimestampEpochNanos(timestamp)
                     .build()
             }
@@ -298,12 +343,21 @@ class IntentServiceImpl private constructor(
                 byId[updateParent.parentId] ?: throw IllegalArgumentException("No intent with id ${updateParent.parentId}")
 
                 op.toBuilder()
+                    .setId(id)
                     .setTimestampEpochNanos(timestamp)
                     .build()
             }
 
-            op.hasDeleteIntent() || op.hasFulfillIntent() -> {
+            op.hasDeleteIntent() -> {
                 op.toBuilder()
+                    .setId(id)
+                    .setTimestampEpochNanos(timestamp)
+                    .build()
+            }
+
+            op.hasFulfillIntent() -> {
+                op.toBuilder()
+                    .setId(id)
                     .setTimestampEpochNanos(timestamp)
                     .build()
             }
@@ -313,6 +367,7 @@ class IntentServiceImpl private constructor(
                 byId[addField.intentId] ?: throw IllegalArgumentException("No intent with id ${addField.intentId}")
 
                 op.toBuilder()
+                    .setId(id)
                     .setTimestampEpochNanos(timestamp)
                     .build()
             }
@@ -322,6 +377,7 @@ class IntentServiceImpl private constructor(
                 byId[setFieldValue.intentId] ?: throw IllegalArgumentException("No intent with id ${setFieldValue.intentId}")
 
                 op.toBuilder()
+                    .setId(id)
                     .setTimestampEpochNanos(timestamp)
                     .build()
             }
@@ -338,42 +394,48 @@ class IntentServiceImpl private constructor(
         return when {
             finalizedOp.hasCreateIntent() -> {
                 val create = finalizedOp.createIntent
-                handleCreateIntent(create, timestamp)
-                CommandResult("added intent ${create.id}")
+                handleCreateIntent(finalizedOp.id, create, timestamp)
+                CommandResult("added intent ${finalizedOp.id}")
             }
 
             finalizedOp.hasUpdateIntent() -> {
                 val update = finalizedOp.updateIntent
+                createMetaIntentForOp(finalizedOp)
                 handleUpdateIntent(update, timestamp)
                 CommandResult("updated intent ${update.id}")
             }
 
             finalizedOp.hasUpdateIntentParent() -> {
                 val updateParent = finalizedOp.updateIntentParent
+                createMetaIntentForOp(finalizedOp)
                 handleUpdateIntentParent(updateParent, timestamp)
                 CommandResult("moved intent ${updateParent.id} to parent ${updateParent.parentId}")
             }
 
             finalizedOp.hasDeleteIntent() -> {
                 val delete = finalizedOp.deleteIntent
+                createMetaIntentForOp(finalizedOp)
                 handleDeleteIntent(delete)
                 CommandResult("deleted intent ${delete.id}")
             }
 
             finalizedOp.hasFulfillIntent() -> {
                 val fulfill = finalizedOp.fulfillIntent
+                createMetaIntentForOp(finalizedOp)
                 handleFulfillIntent(fulfill)
                 CommandResult("fulfilled intent ${fulfill.id}")
             }
 
             finalizedOp.hasAddField() -> {
                 val addField = finalizedOp.addField
+                createMetaIntentForOp(finalizedOp)
                 handleAddField(addField)
                 CommandResult("added field '${addField.fieldName}' to intent ${addField.intentId}")
             }
 
             finalizedOp.hasSetFieldValue() -> {
                 val setFieldValue = finalizedOp.setFieldValue
+                createMetaIntentForOp(finalizedOp)
                 handleSetFieldValue(setFieldValue)
                 CommandResult("set field '${setFieldValue.fieldName}' on intent ${setFieldValue.intentId}")
             }
@@ -386,26 +448,32 @@ class IntentServiceImpl private constructor(
     }
 
     override fun addIntent(text: String, parentId: Long): Intent {
+        val id = nextId
+        nextId = id + 1
+
         val createIntent = CreateIntent.newBuilder()
-            .setId(nextId)
             .setText(text)
             .setParentId(parentId)
             .build()
 
         val timestamp = currentEpochNanos()
         val op = Op.newBuilder()
+            .setId(id)
             .setCreateIntent(createIntent)
             .setTimestampEpochNanos(timestamp)
             .build()
 
         streamBuilder.addOps(op)
-        handleCreateIntent(createIntent, timestamp)
+        handleCreateIntent(id, createIntent, timestamp)
 
-        return byId[createIntent.id]!!
+        return byId[id]!!
     }
 
     override fun edit(id: Long, newText: String) {
         byId[id] ?: throw IllegalArgumentException("No intent with id $id")
+
+        val opId = nextId
+        nextId = opId + 1
 
         val updateIntent = UpdateIntentText.newBuilder()
             .setId(id)
@@ -415,11 +483,13 @@ class IntentServiceImpl private constructor(
         val timestamp = currentEpochNanos()
 
         val op = Op.newBuilder()
+            .setId(opId)
             .setUpdateIntent(updateIntent)
             .setTimestampEpochNanos(timestamp)
             .build()
 
         streamBuilder.addOps(op)
+        createMetaIntentForOp(op)
         handleUpdateIntent(updateIntent, timestamp)
     }
 
@@ -427,19 +497,23 @@ class IntentServiceImpl private constructor(
         byId[id] ?: throw IllegalArgumentException("No intent with id $id")
         byId[newParentId] ?: throw IllegalArgumentException("No intent with id $newParentId")
 
+        val opId = nextId
+        nextId = opId + 1
+
         val updateIntentParent = UpdateIntentParent.newBuilder()
             .setId(id)
             .setParentId(newParentId)
             .build()
 
-
         val timestamp = currentEpochNanos()
         val op = Op.newBuilder()
+            .setId(opId)
             .setUpdateIntentParent(updateIntentParent)
             .setTimestampEpochNanos(timestamp)
             .build()
 
         streamBuilder.addOps(op)
+        createMetaIntentForOp(op)
         handleUpdateIntentParent(updateIntentParent, timestamp)
     }
 
@@ -458,7 +532,9 @@ class IntentServiceImpl private constructor(
         )
     }
 
-    override fun getAll(): List<Intent> = byId.values.toList()
+    override fun getAll(): List<Intent> = byId.values.filter { !it.isMeta() }
+
+    fun getAllIncludingMeta(): List<Intent> = byId.values.toList()
 
     override fun writeToFile(fileName: String) {
         val stream = streamBuilder.build()
@@ -481,7 +557,8 @@ class IntentImpl(
     private val createdTimestamp: Long? = null,
     private val lastUpdatedTimestamp: Long? = null,
     private val fields: MutableMap<String, FieldDetails> = mutableMapOf(),
-    private val values: MutableMap<String, Any> = mutableMapOf()
+    private val values: MutableMap<String, Any> = mutableMapOf(),
+    private val isMeta: Boolean = true
 ) : Intent {
     override fun text() = text
     override fun id() = id
@@ -491,6 +568,7 @@ class IntentImpl(
     override fun lastUpdatedTimestamp() = lastUpdatedTimestamp
     override fun fields(): Map<String, FieldDetails> = fields
     override fun fieldValues(): Map<String, Any> = values
+    override fun isMeta() = isMeta
 
     internal fun addField(name: String, details: FieldDetails) {
         fields[name] = details

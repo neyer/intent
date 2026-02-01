@@ -25,4 +25,10 @@ interface Intent {
     fun fields(): Map<String, FieldDetails>
 
     fun fieldValues(): Map<String, Any>
+
+    /**
+     * Returns true if this intent represents a meta-operation (like UpdateIntentText, AddField, etc.)
+     * Returns false for regular intents created via CreateIntent.
+     */
+    fun isMeta(): Boolean
 }
