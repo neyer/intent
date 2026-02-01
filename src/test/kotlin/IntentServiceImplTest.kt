@@ -2,6 +2,8 @@ import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.IntentService
 import com.intentevolved.com.intentevolved.IntentServiceImpl
 import com.intentevolved.com.intentevolved.IntentStreamConsumer
+import com.intentevolved.com.intentevolved.IntentStateProvider
+import com.intentevolved.com.intentevolved.terminal.DoCommand
 import com.intentevolved.AddField
 import com.intentevolved.FieldType
 import com.intentevolved.Op
@@ -610,5 +612,102 @@ class IntentServiceImplTest {
         val values = loadedIntent.fieldValues()
         assertEquals(5, values["priority"])
         assertEquals("Important task", values["notes"])
+    }
+
+    // DoCommand tests
+
+    @Test
+    fun `do command adds done field and sets it to true`() {
+        val localService = IntentServiceImpl.new("Test do command")
+        val intent = localService.addIntent("Task to complete", parentId = 0)
+
+        val doCommand = DoCommand()
+        val result = doCommand.process(
+            intent.id().toString(),
+            localService as IntentStreamConsumer,
+            localService as IntentStateProvider,
+            0L
+        )
+
+        assertEquals("Marked intent ${intent.id()} as done", result.message)
+
+        val updatedIntent = localService.getById(intent.id())!!
+
+        // Verify field was added
+        val fields = updatedIntent.fields()
+        assertTrue(fields.containsKey("done"))
+        assertEquals(FieldType.FIELD_TYPE_BOOL, fields["done"]!!.fieldType)
+
+        // Verify value was set
+        val values = updatedIntent.fieldValues()
+        assertEquals(true, values["done"])
+    }
+
+    @Test
+    fun `do command works when done field already exists`() {
+        val localService = IntentServiceImpl.new("Test do command")
+        val consumer = localService as IntentStreamConsumer
+        val intent = localService.addIntent("Task to complete", parentId = 0)
+
+        // Manually add the done field first
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("done")
+                .setFieldType(FieldType.FIELD_TYPE_BOOL))
+            .build())
+
+        // Set it to false initially
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("done")
+                .setBoolValue(false))
+            .build())
+
+        // Now run the do command
+        val doCommand = DoCommand()
+        val result = doCommand.process(
+            intent.id().toString(),
+            consumer,
+            localService as IntentStateProvider,
+            0L
+        )
+
+        assertEquals("Marked intent ${intent.id()} as done", result.message)
+
+        // Verify value was set to true
+        val values = localService.getById(intent.id())!!.fieldValues()
+        assertEquals(true, values["done"])
+    }
+
+    @Test
+    fun `do command returns error for non-existent intent`() {
+        val localService = IntentServiceImpl.new("Test do command")
+
+        val doCommand = DoCommand()
+        val result = doCommand.process(
+            "999",
+            localService as IntentStreamConsumer,
+            localService as IntentStateProvider,
+            0L
+        )
+
+        assertEquals("No intent with id 999", result.message)
+    }
+
+    @Test
+    fun `do command returns error for invalid intent id`() {
+        val localService = IntentServiceImpl.new("Test do command")
+
+        val doCommand = DoCommand()
+        val result = doCommand.process(
+            "not-a-number",
+            localService as IntentStreamConsumer,
+            localService as IntentStateProvider,
+            0L
+        )
+
+        assertEquals("Do command requires an intent id", result.message)
     }
 }

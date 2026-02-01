@@ -2,8 +2,11 @@ package com.intentevolved.com.intentevolved.terminal
 
 import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
+import com.intentevolved.AddField
+import com.intentevolved.FieldType
 import com.intentevolved.Op
 import com.intentevolved.CreateIntent
+import com.intentevolved.SetFieldValue
 import com.intentevolved.UpdateIntentText
 import com.intentevolved.UpdateIntentParent
 import com.intentevolved.com.intentevolved.CommandResult
@@ -214,6 +217,46 @@ class MoveCommand : Command("move") {
     }
 }
 
+class DoCommand : Command("do") {
+    override fun process(args: String, consumer: IntentStreamConsumer, stateProvider: IntentStateProvider, focalIntent: Long): CommandResult {
+        val intentId = args.trim().toLongOrNull()
+            ?: return CommandResult("Do command requires an intent id")
+
+        val intent = stateProvider.getById(intentId)
+            ?: return CommandResult("No intent with id $intentId")
+
+        try {
+            // Add the 'done' field if it doesn't already exist
+            if (!intent.fields().containsKey("done")) {
+                val addFieldOp = Op.newBuilder()
+                    .setAddField(
+                        AddField.newBuilder()
+                            .setIntentId(intentId)
+                            .setFieldName("done")
+                            .setFieldType(FieldType.FIELD_TYPE_BOOL)
+                    )
+                    .build()
+                consumer.consume(addFieldOp)
+            }
+
+            // Set the 'done' field to true
+            val setValueOp = Op.newBuilder()
+                .setSetFieldValue(
+                    SetFieldValue.newBuilder()
+                        .setIntentId(intentId)
+                        .setFieldName("done")
+                        .setBoolValue(true)
+                )
+                .build()
+            consumer.consume(setValueOp)
+
+            return CommandResult("Marked intent $intentId as done")
+        } catch (e: IllegalArgumentException) {
+            return CommandResult("Error: ${e.message}")
+        }
+    }
+}
+
 // Command registry and executor
 class CommandExecutor(
     private val consumer: IntentStreamConsumer,
@@ -223,7 +266,8 @@ class CommandExecutor(
         FocusCommand(),
         UpdateCommand(),
         UpCommand(),
-        MoveCommand()
+        MoveCommand(),
+        DoCommand()
     )
 
     fun execute(command: String, currentFocalIntent: Long): Pair<String, Long> {

@@ -71,21 +71,18 @@ fun drawFullScreen(screen: Screen, handler: InputHandler, service: IntentService
 
     scope.ancestry.forEachIndexed { ancestorNo, intent ->
         val spaces = " ".repeat(ancestorNo)
-        renderIntentRow(tg, intent, thisRow, spaces)
-        ++thisRow
+        thisRow += renderIntentRow(tg, intent, thisRow, spaces)
     }
 
     ++thisRow
     // then put the intent itself
-    renderIntentRow(tg, scope.focus, thisRow)
-
+    thisRow += renderIntentRow(tg, scope.focus, thisRow)
 
     ++thisRow
 
     // then put children
     scope.children.forEach { intent ->
-        renderIntentRow(tg, intent, thisRow, " ")
-        ++thisRow
+        thisRow += renderIntentRow(tg, intent, thisRow, " ")
     }
 }
 
@@ -94,10 +91,23 @@ fun clearLine(tg: TextGraphics, row: Int) {
     tg.fillRectangle(TerminalPosition(0, row), TerminalSize(size.columns, 1), ' ')
 }
 
-fun renderIntentRow(tg: TextGraphics, intent: Intent, row: Int, prefix: String="") {
+/**
+ * Renders an intent row and its field values.
+ * Returns the number of rows used.
+ */
+fun renderIntentRow(tg: TextGraphics, intent: Intent, row: Int, prefix: String=""): Int {
     val epochNanos = intent.lastUpdatedTimestamp() ?: intent.createdTimestamp()
     val timestamp = epochNanos?.let { formatEpochNanosAsLocalMinute(it) } ?: "unknown time"
     tg.putString(0, row, "$prefix${intent.id()} - ${intent.text()} (at $timestamp)")
+
+    var rowsUsed = 1
+    val fieldIndent = "$prefix    "
+    intent.fieldValues().forEach { (name, value) ->
+        tg.putString(0, row + rowsUsed, "$fieldIndent$name: $value")
+        rowsUsed++
+    }
+
+    return rowsUsed
 }
 
 private val INTENT_TIME_FORMATTER: DateTimeFormatter =
