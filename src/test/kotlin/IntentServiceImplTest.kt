@@ -1,6 +1,11 @@
 import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.IntentService
 import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.IntentStreamConsumer
+import com.intentevolved.AddField
+import com.intentevolved.FieldType
+import com.intentevolved.Op
+import com.intentevolved.SetFieldValue
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.BeforeEach
@@ -212,5 +217,398 @@ class IntentServiceImplTest {
         assertThrows(IllegalArgumentException::class.java) {
             service.moveParent(intent.id(), 999L)
         }
+    }
+
+    // AddField tests
+
+    @Test
+    fun `addField adds a field to an intent`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        val addFieldOp = Op.newBuilder()
+            .setAddField(
+                AddField.newBuilder()
+                    .setIntentId(intent.id())
+                    .setFieldName("priority")
+                    .setFieldType(FieldType.FIELD_TYPE_INT32)
+                    .setRequired(true)
+                    .setDescription("The priority level")
+            )
+            .build()
+
+        consumer.consume(addFieldOp)
+
+        val updatedIntent = service.getById(intent.id())!!
+        val fields = updatedIntent.fields()
+
+        assertEquals(1, fields.size)
+        assertTrue(fields.containsKey("priority"))
+        assertEquals(FieldType.FIELD_TYPE_INT32, fields["priority"]!!.fieldType)
+        assertEquals(true, fields["priority"]!!.required)
+        assertEquals("The priority level", fields["priority"]!!.description)
+    }
+
+    @Test
+    fun `addField with optional fields uses defaults`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        val addFieldOp = Op.newBuilder()
+            .setAddField(
+                AddField.newBuilder()
+                    .setIntentId(intent.id())
+                    .setFieldName("notes")
+                    .setFieldType(FieldType.FIELD_TYPE_STRING)
+            )
+            .build()
+
+        consumer.consume(addFieldOp)
+
+        val fields = service.getById(intent.id())!!.fields()
+
+        assertEquals(false, fields["notes"]!!.required)
+        assertNull(fields["notes"]!!.description)
+    }
+
+    @Test
+    fun `addField throws for non-existent intent`() {
+        val consumer = service as IntentStreamConsumer
+
+        val addFieldOp = Op.newBuilder()
+            .setAddField(
+                AddField.newBuilder()
+                    .setIntentId(999L)
+                    .setFieldName("priority")
+                    .setFieldType(FieldType.FIELD_TYPE_INT32)
+            )
+            .build()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            consumer.consume(addFieldOp)
+        }
+    }
+
+    // SetFieldValue tests
+
+    @Test
+    fun `setFieldValue sets a string value`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        // First add the field
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("name")
+                .setFieldType(FieldType.FIELD_TYPE_STRING))
+            .build())
+
+        // Then set the value
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("name")
+                .setStringValue("Test Name"))
+            .build())
+
+        val values = service.getById(intent.id())!!.fieldValues()
+        assertEquals("Test Name", values["name"])
+    }
+
+    @Test
+    fun `setFieldValue sets an int32 value`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("count")
+                .setFieldType(FieldType.FIELD_TYPE_INT32))
+            .build())
+
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("count")
+                .setInt32Value(42))
+            .build())
+
+        val values = service.getById(intent.id())!!.fieldValues()
+        assertEquals(42, values["count"])
+    }
+
+    @Test
+    fun `setFieldValue sets an int64 value`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("bigNumber")
+                .setFieldType(FieldType.FIELD_TYPE_INT64))
+            .build())
+
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("bigNumber")
+                .setInt64Value(9999999999L))
+            .build())
+
+        val values = service.getById(intent.id())!!.fieldValues()
+        assertEquals(9999999999L, values["bigNumber"])
+    }
+
+    @Test
+    fun `setFieldValue sets a bool value`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("active")
+                .setFieldType(FieldType.FIELD_TYPE_BOOL))
+            .build())
+
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("active")
+                .setBoolValue(true))
+            .build())
+
+        val values = service.getById(intent.id())!!.fieldValues()
+        assertEquals(true, values["active"])
+    }
+
+    @Test
+    fun `setFieldValue sets a float value`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("rating")
+                .setFieldType(FieldType.FIELD_TYPE_FLOAT))
+            .build())
+
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("rating")
+                .setFloatValue(4.5f))
+            .build())
+
+        val values = service.getById(intent.id())!!.fieldValues()
+        assertEquals(4.5f, values["rating"])
+    }
+
+    @Test
+    fun `setFieldValue sets a double value`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("precise")
+                .setFieldType(FieldType.FIELD_TYPE_DOUBLE))
+            .build())
+
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("precise")
+                .setDoubleValue(3.14159265359))
+            .build())
+
+        val values = service.getById(intent.id())!!.fieldValues()
+        assertEquals(3.14159265359, values["precise"])
+    }
+
+    @Test
+    fun `setFieldValue sets a timestamp value`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("dueDate")
+                .setFieldType(FieldType.FIELD_TYPE_TIMESTAMP))
+            .build())
+
+        val timestamp = 1704067200000000000L // 2024-01-01 in nanos
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("dueDate")
+                .setTimestampValue(timestamp))
+            .build())
+
+        val values = service.getById(intent.id())!!.fieldValues()
+        assertEquals(timestamp, values["dueDate"])
+    }
+
+    @Test
+    fun `setFieldValue sets an intent ref value`() {
+        val intent1 = service.addIntent("Test intent 1", parentId = 0)
+        val intent2 = service.addIntent("Test intent 2", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent1.id())
+                .setFieldName("relatedIntent")
+                .setFieldType(FieldType.FIELD_TYPE_INTENT_REF))
+            .build())
+
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent1.id())
+                .setFieldName("relatedIntent")
+                .setIntentRefValue(intent2.id()))
+            .build())
+
+        val values = service.getById(intent1.id())!!.fieldValues()
+        assertEquals(intent2.id(), values["relatedIntent"])
+    }
+
+    @Test
+    fun `setFieldValue throws for type mismatch`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("count")
+                .setFieldType(FieldType.FIELD_TYPE_INT32))
+            .build())
+
+        assertThrows(IllegalArgumentException::class.java) {
+            consumer.consume(Op.newBuilder()
+                .setSetFieldValue(SetFieldValue.newBuilder()
+                    .setIntentId(intent.id())
+                    .setFieldName("count")
+                    .setStringValue("not a number"))
+                .build())
+        }
+    }
+
+    @Test
+    fun `setFieldValue throws for non-existent field`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        assertThrows(IllegalArgumentException::class.java) {
+            consumer.consume(Op.newBuilder()
+                .setSetFieldValue(SetFieldValue.newBuilder()
+                    .setIntentId(intent.id())
+                    .setFieldName("nonExistent")
+                    .setStringValue("value"))
+                .build())
+        }
+    }
+
+    @Test
+    fun `setFieldValue throws for non-existent intent`() {
+        val consumer = service as IntentStreamConsumer
+
+        assertThrows(IllegalArgumentException::class.java) {
+            consumer.consume(Op.newBuilder()
+                .setSetFieldValue(SetFieldValue.newBuilder()
+                    .setIntentId(999L)
+                    .setFieldName("field")
+                    .setStringValue("value"))
+                .build())
+        }
+    }
+
+    @Test
+    fun `setFieldValue throws for non-existent intent ref`() {
+        val intent = service.addIntent("Test intent", parentId = 0)
+        val consumer = service as IntentStreamConsumer
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("relatedIntent")
+                .setFieldType(FieldType.FIELD_TYPE_INTENT_REF))
+            .build())
+
+        assertThrows(IllegalArgumentException::class.java) {
+            consumer.consume(Op.newBuilder()
+                .setSetFieldValue(SetFieldValue.newBuilder()
+                    .setIntentId(intent.id())
+                    .setFieldName("relatedIntent")
+                    .setIntentRefValue(999L))
+                .build())
+        }
+    }
+
+    @Test
+    fun `fields and values persist after save and reload`(@TempDir tempDir: Path) {
+        val testFile = tempDir.resolve("test_fields.pb").toString()
+        val localService = IntentServiceImpl.new("Test fields persistence")
+        val consumer = localService as IntentStreamConsumer
+
+        val intent = localService.addIntent("Intent with fields", parentId = 0)
+
+        // Add fields
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("priority")
+                .setFieldType(FieldType.FIELD_TYPE_INT32)
+                .setRequired(true)
+                .setDescription("Priority level"))
+            .build())
+
+        consumer.consume(Op.newBuilder()
+            .setAddField(AddField.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("notes")
+                .setFieldType(FieldType.FIELD_TYPE_STRING))
+            .build())
+
+        // Set values
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("priority")
+                .setInt32Value(5))
+            .build())
+
+        consumer.consume(Op.newBuilder()
+            .setSetFieldValue(SetFieldValue.newBuilder()
+                .setIntentId(intent.id())
+                .setFieldName("notes")
+                .setStringValue("Important task"))
+            .build())
+
+        // Save and reload
+        localService.writeToFile(testFile)
+        val loadedService = IntentServiceImpl.fromFile(testFile)
+
+        val loadedIntent = loadedService.getById(intent.id())!!
+
+        // Verify fields
+        val fields = loadedIntent.fields()
+        assertEquals(2, fields.size)
+        assertEquals(FieldType.FIELD_TYPE_INT32, fields["priority"]!!.fieldType)
+        assertEquals(true, fields["priority"]!!.required)
+        assertEquals("Priority level", fields["priority"]!!.description)
+        assertEquals(FieldType.FIELD_TYPE_STRING, fields["notes"]!!.fieldType)
+
+        // Verify values
+        val values = loadedIntent.fieldValues()
+        assertEquals(5, values["priority"])
+        assertEquals("Important task", values["notes"])
     }
 }

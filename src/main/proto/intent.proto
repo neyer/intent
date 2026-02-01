@@ -26,6 +26,8 @@ message Op {
     DeleteIntent delete_intent = 3;
     FulfillIntent fulfill_intent = 4;
     UpdateIntentParent update_intent_parent = 5;
+    AddField add_field = 6;
+    SetFieldValue set_field_value = 7;
   }
   // bump field numbers up here to leave space for more messages
   optional int64 timestamp_epoch_nanos = 1000;
@@ -52,6 +54,46 @@ message UpdateIntentParent {
 message DeleteIntent {
   int64 id = 1;
 }
+
+message AddField {
+  int64 intentId = 1;
+  string fieldName = 2;
+  FieldType fieldType = 3;
+  optional bool required = 4;  // Is this field mandatory?
+  optional string description = 5;  // What's this field for?
+  // todo: enums
+}
+
+enum FieldType {
+  FIELD_TYPE_UNSPECIFIED = 0;
+  FIELD_TYPE_STRING = 1;
+  FIELD_TYPE_INT32 = 2;
+  FIELD_TYPE_INT64 = 3;
+  FIELD_TYPE_FLOAT = 4;
+  FIELD_TYPE_DOUBLE = 5;
+  FIELD_TYPE_BOOL = 6;
+  FIELD_TYPE_TIMESTAMP = 8;  // Epoch nanos
+  FIELD_TYPE_INTENT_REF = 9;  // Reference to another intent by ID
+}
+
+// For setting values on fields you've defined
+message SetFieldValue {
+  int64 intentId = 1;
+  string fieldName = 2;
+  oneof value {
+    string string_value = 3;
+    int32 int32_value = 4;
+    int64 int64_value = 5;
+    float float_value = 6;
+    double double_value = 7;
+    bool bool_value = 8;
+    int64 timestamp_value = 9;
+    int64 intent_ref_value = 10;
+  }
+}
+
+// For defining enums that can be used in AddField
+// todo: enums
 
 // eventually this will become more complex
 // once the stream works for multiple authors, there'll be a mechanism where

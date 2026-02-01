@@ -1,9 +1,12 @@
 package com.intentevolved.com.intentevolved
 
+import com.intentevolved.AddField
 import com.intentevolved.CreateIntent
+import com.intentevolved.FieldType
 import com.intentevolved.IntentStream
 import com.intentevolved.IntentStream.Builder as IntentStreamBuilder
 import com.intentevolved.Op
+import com.intentevolved.SetFieldValue
 import com.intentevolved.UpdateIntentText
 import com.intentevolved.UpdateIntentParent
 import com.intentevolved.DeleteIntent
@@ -86,6 +89,8 @@ class IntentServiceImpl private constructor(
                 op.hasUpdateIntentParent() -> handleUpdateIntentParent(op.updateIntentParent, op.timestampEpochNanos)
                 op.hasDeleteIntent() -> handleDeleteIntent(op.deleteIntent)
                 op.hasFulfillIntent() -> handleFulfillIntent(op.fulfillIntent)
+                op.hasAddField() -> handleAddField(op.addField)
+                op.hasSetFieldValue() -> handleSetFieldValue(op.setFieldValue)
             }
         }
     }
@@ -164,6 +169,76 @@ class IntentServiceImpl private constructor(
         // TODO: Handle fulfillment logic when you implement it
     }
 
+    private fun handleAddField(addField: AddField) {
+        val intent = byId[addField.intentId] as? IntentImpl
+            ?: throw IllegalArgumentException("No intent with id ${addField.intentId}")
+
+        val details = FieldDetails(
+            fieldType = addField.fieldType,
+            required = if (addField.hasRequired()) addField.required else false,
+            description = if (addField.hasDescription()) addField.description else null
+        )
+        intent.addField(addField.fieldName, details)
+    }
+
+    private fun handleSetFieldValue(setFieldValue: SetFieldValue) {
+        val intent = byId[setFieldValue.intentId] as? IntentImpl
+            ?: throw IllegalArgumentException("No intent with id ${setFieldValue.intentId}")
+
+        val fieldName = setFieldValue.fieldName
+        val fieldDetails = intent.fields()[fieldName]
+            ?: throw IllegalArgumentException("No field '$fieldName' on intent ${setFieldValue.intentId}")
+
+        val value: Any = when (setFieldValue.valueCase) {
+            SetFieldValue.ValueCase.STRING_VALUE -> {
+                validateFieldType(fieldDetails.fieldType, FieldType.FIELD_TYPE_STRING, fieldName)
+                setFieldValue.stringValue
+            }
+            SetFieldValue.ValueCase.INT32_VALUE -> {
+                validateFieldType(fieldDetails.fieldType, FieldType.FIELD_TYPE_INT32, fieldName)
+                setFieldValue.int32Value
+            }
+            SetFieldValue.ValueCase.INT64_VALUE -> {
+                validateFieldType(fieldDetails.fieldType, FieldType.FIELD_TYPE_INT64, fieldName)
+                setFieldValue.int64Value
+            }
+            SetFieldValue.ValueCase.FLOAT_VALUE -> {
+                validateFieldType(fieldDetails.fieldType, FieldType.FIELD_TYPE_FLOAT, fieldName)
+                setFieldValue.floatValue
+            }
+            SetFieldValue.ValueCase.DOUBLE_VALUE -> {
+                validateFieldType(fieldDetails.fieldType, FieldType.FIELD_TYPE_DOUBLE, fieldName)
+                setFieldValue.doubleValue
+            }
+            SetFieldValue.ValueCase.BOOL_VALUE -> {
+                validateFieldType(fieldDetails.fieldType, FieldType.FIELD_TYPE_BOOL, fieldName)
+                setFieldValue.boolValue
+            }
+            SetFieldValue.ValueCase.TIMESTAMP_VALUE -> {
+                validateFieldType(fieldDetails.fieldType, FieldType.FIELD_TYPE_TIMESTAMP, fieldName)
+                setFieldValue.timestampValue
+            }
+            SetFieldValue.ValueCase.INTENT_REF_VALUE -> {
+                validateFieldType(fieldDetails.fieldType, FieldType.FIELD_TYPE_INTENT_REF, fieldName)
+                // Validate that the referenced intent exists
+                byId[setFieldValue.intentRefValue]
+                    ?: throw IllegalArgumentException("Referenced intent ${setFieldValue.intentRefValue} does not exist")
+                setFieldValue.intentRefValue
+            }
+            SetFieldValue.ValueCase.VALUE_NOT_SET -> {
+                throw IllegalArgumentException("No value provided for field '$fieldName'")
+            }
+        }
+
+        intent.setFieldValue(fieldName, value)
+    }
+
+    private fun validateFieldType(expected: FieldType, actual: FieldType, fieldName: String) {
+        if (expected != actual) {
+            throw IllegalArgumentException("Field '$fieldName' expects type $expected but got $actual")
+        }
+    }
+
     /**
      * Implementation of the IntentStreamConsumer contract.
      *
@@ -233,6 +308,24 @@ class IntentServiceImpl private constructor(
                     .build()
             }
 
+            op.hasAddField() -> {
+                val addField = op.addField
+                byId[addField.intentId] ?: throw IllegalArgumentException("No intent with id ${addField.intentId}")
+
+                op.toBuilder()
+                    .setTimestampEpochNanos(timestamp)
+                    .build()
+            }
+
+            op.hasSetFieldValue() -> {
+                val setFieldValue = op.setFieldValue
+                byId[setFieldValue.intentId] ?: throw IllegalArgumentException("No intent with id ${setFieldValue.intentId}")
+
+                op.toBuilder()
+                    .setTimestampEpochNanos(timestamp)
+                    .build()
+            }
+
             else -> {
                 throw IllegalArgumentException("Op has no payload")
             }
@@ -271,6 +364,18 @@ class IntentServiceImpl private constructor(
                 val fulfill = finalizedOp.fulfillIntent
                 handleFulfillIntent(fulfill)
                 CommandResult("fulfilled intent ${fulfill.id}")
+            }
+
+            finalizedOp.hasAddField() -> {
+                val addField = finalizedOp.addField
+                handleAddField(addField)
+                CommandResult("added field '${addField.fieldName}' to intent ${addField.intentId}")
+            }
+
+            finalizedOp.hasSetFieldValue() -> {
+                val setFieldValue = finalizedOp.setFieldValue
+                handleSetFieldValue(setFieldValue)
+                CommandResult("set field '${setFieldValue.fieldName}' on intent ${setFieldValue.intentId}")
             }
 
             else -> {
@@ -374,7 +479,9 @@ class IntentImpl(
     internal val parentId: Long? = null,
     private val serviceImpl: IntentServiceImpl,
     private val createdTimestamp: Long? = null,
-    private val lastUpdatedTimestamp: Long? = null
+    private val lastUpdatedTimestamp: Long? = null,
+    private val fields: MutableMap<String, FieldDetails> = mutableMapOf(),
+    private val values: MutableMap<String, Any> = mutableMapOf()
 ) : Intent {
     override fun text() = text
     override fun id() = id
@@ -382,4 +489,14 @@ class IntentImpl(
     override fun children(): List<Intent> = listOf()
     override fun createdTimestamp() = createdTimestamp
     override fun lastUpdatedTimestamp() = lastUpdatedTimestamp
+    override fun fields(): Map<String, FieldDetails> = fields
+    override fun fieldValues(): Map<String, Any> = values
+
+    internal fun addField(name: String, details: FieldDetails) {
+        fields[name] = details
+    }
+
+    internal fun setFieldValue(name: String, value: Any) {
+        values[name] = value
+    }
 }
