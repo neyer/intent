@@ -20,20 +20,17 @@ message Header {
 
 }
 message Op {
-  oneof payload {
-    CreateIntent create_intent = 1;
-    UpdateIntentText update_intent = 2;
-    DeleteIntent delete_intent = 3;
-    FulfillIntent fulfill_intent = 4;
-    UpdateIntentParent update_intent_parent = 5;
-    AddField add_field = 6;
-    SetFieldValue set_field_value = 7;
-  }
-  // bump field numbers up here to leave space for more messages
-
   // Unique id for this op (the op is also an intent)
-  int64 id = 100;
-  optional int64 timestamp_epoch_nanos = 1000;
+  int64 id = 1;
+  optional int64 timestamp_epoch_nanos = 2;
+
+  oneof payload {
+    CreateIntent create_intent = 10;
+    UpdateIntentText update_intent = 11;
+    UpdateIntentParent update_intent_parent = 12;
+    AddField add_field = 13;
+    SetFieldValue set_field_value = 14;
+  }
 }
 
 message CreateIntent {
@@ -53,9 +50,6 @@ message UpdateIntentParent {
   int64 parentId = 2;
 }
 
-message DeleteIntent {
-  int64 id = 1;
-}
 
 message AddField {
   int64 intentId = 1;
@@ -97,13 +91,6 @@ message SetFieldValue {
 // For defining enums that can be used in AddField
 // todo: enums
 
-// eventually this will become more complex
-// once the stream works for multiple authors, there'll be a mechanism where
-// - one agent says, I've fullfilled the intent
-// - stream owner says "i've confirmed this fulfilled the intent"
-message FulfillIntent {
-  int64 id = 1;
-}
 
 // ============================================================================
 // gRPC Service Definition
@@ -125,11 +112,9 @@ message SubmitOpRequest {
   oneof payload {
     CreateIntent create_intent = 1;
     UpdateIntentText update_intent = 2;
-    DeleteIntent delete_intent = 3;
-    FulfillIntent fulfill_intent = 4;
-    UpdateIntentParent update_intent_parent = 5;
-    AddField add_field = 6;
-    SetFieldValue set_field_value = 7;
+    UpdateIntentParent update_intent_parent = 3;
+    AddField add_field = 4;
+    SetFieldValue set_field_value = 5;
   }
 }
 

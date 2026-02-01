@@ -184,8 +184,6 @@ class IntentGrpcClient(
         when {
             op.hasCreateIntent() -> builder.setCreateIntent(op.createIntent)
             op.hasUpdateIntent() -> builder.setUpdateIntent(op.updateIntent)
-            op.hasDeleteIntent() -> builder.setDeleteIntent(op.deleteIntent)
-            op.hasFulfillIntent() -> builder.setFulfillIntent(op.fulfillIntent)
             op.hasUpdateIntentParent() -> builder.setUpdateIntentParent(op.updateIntentParent)
             op.hasAddField() -> builder.setAddField(op.addField)
             op.hasSetFieldValue() -> builder.setSetFieldValue(op.setFieldValue)

@@ -9,8 +9,6 @@ import com.intentevolved.Op
 import com.intentevolved.SetFieldValue
 import com.intentevolved.UpdateIntentText
 import com.intentevolved.UpdateIntentParent
-import com.intentevolved.DeleteIntent
-import com.intentevolved.FulfillIntent
 import java.time.Instant
 import java.io.File
 import java.io.FileInputStream
@@ -93,8 +91,6 @@ class IntentServiceImpl private constructor(
                 op.hasCreateIntent() -> handleCreateIntent(op.id, op.createIntent, op.timestampEpochNanos)
                 op.hasUpdateIntent() -> handleUpdateIntent(op.updateIntent, op.timestampEpochNanos)
                 op.hasUpdateIntentParent() -> handleUpdateIntentParent(op.updateIntentParent, op.timestampEpochNanos)
-                op.hasDeleteIntent() -> handleDeleteIntent(op.deleteIntent)
-                op.hasFulfillIntent() -> handleFulfillIntent(op.fulfillIntent)
                 op.hasAddField() -> handleAddField(op.addField)
                 op.hasSetFieldValue() -> handleSetFieldValue(op.setFieldValue)
             }
@@ -128,8 +124,6 @@ class IntentServiceImpl private constructor(
         return when {
             op.hasUpdateIntent() -> op.updateIntent.id
             op.hasUpdateIntentParent() -> op.updateIntentParent.id
-            op.hasDeleteIntent() -> op.deleteIntent.id
-            op.hasFulfillIntent() -> op.fulfillIntent.id
             op.hasAddField() -> op.addField.intentId
             op.hasSetFieldValue() -> op.setFieldValue.intentId
             else -> null
@@ -141,8 +135,6 @@ class IntentServiceImpl private constructor(
             op.hasCreateIntent() -> "CreateIntent: ${op.createIntent.text}"
             op.hasUpdateIntent() -> "UpdateIntentText: ${op.updateIntent.newText}"
             op.hasUpdateIntentParent() -> "UpdateIntentParent: move to ${op.updateIntentParent.parentId}"
-            op.hasDeleteIntent() -> "DeleteIntent"
-            op.hasFulfillIntent() -> "FulfillIntent"
             op.hasAddField() -> "AddField: ${op.addField.fieldName}"
             op.hasSetFieldValue() -> "SetFieldValue: ${op.setFieldValue.fieldName}"
             else -> "UnknownOp"
@@ -214,18 +206,6 @@ class IntentServiceImpl private constructor(
             isMeta = existing.isMeta()
         )
         byId[update.id] = updated
-    }
-
-    private fun handleDeleteIntent(delete: DeleteIntent) {
-        val existing = byId[delete.id]!!
-        byId.remove(delete.id)
-        if (existing.parent() != null) {
-            childrenById[existing.parent()!!.id()]!!.remove(existing.id())
-        }
-    }
-
-    private fun handleFulfillIntent(fulfill: FulfillIntent) {
-        // TODO: Handle fulfillment logic when you implement it
     }
 
     private fun handleAddField(addField: AddField) {
@@ -348,20 +328,6 @@ class IntentServiceImpl private constructor(
                     .build()
             }
 
-            op.hasDeleteIntent() -> {
-                op.toBuilder()
-                    .setId(id)
-                    .setTimestampEpochNanos(timestamp)
-                    .build()
-            }
-
-            op.hasFulfillIntent() -> {
-                op.toBuilder()
-                    .setId(id)
-                    .setTimestampEpochNanos(timestamp)
-                    .build()
-            }
-
             op.hasAddField() -> {
                 val addField = op.addField
                 byId[addField.intentId] ?: throw IllegalArgumentException("No intent with id ${addField.intentId}")
@@ -410,20 +376,6 @@ class IntentServiceImpl private constructor(
                 createMetaIntentForOp(finalizedOp)
                 handleUpdateIntentParent(updateParent, timestamp)
                 CommandResult("moved intent ${updateParent.id} to parent ${updateParent.parentId}")
-            }
-
-            finalizedOp.hasDeleteIntent() -> {
-                val delete = finalizedOp.deleteIntent
-                createMetaIntentForOp(finalizedOp)
-                handleDeleteIntent(delete)
-                CommandResult("deleted intent ${delete.id}")
-            }
-
-            finalizedOp.hasFulfillIntent() -> {
-                val fulfill = finalizedOp.fulfillIntent
-                createMetaIntentForOp(finalizedOp)
-                handleFulfillIntent(fulfill)
-                CommandResult("fulfilled intent ${fulfill.id}")
             }
 
             finalizedOp.hasAddField() -> {

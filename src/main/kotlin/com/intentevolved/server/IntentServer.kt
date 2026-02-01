@@ -45,6 +45,7 @@ class IntentServer(
             val fileName = args.getOrNull(1) ?: "current.pb"
 
             val service = try {
+                println("Loading intent stream from $fileName")
                 IntentServiceImpl.fromFile(fileName)
             } catch (e: IllegalArgumentException) {
                 println("File not found, creating new intent stream")
@@ -129,10 +130,6 @@ class IntentServiceGrpcImpl(
                 builder.setCreateIntent(request.createIntent)
             SubmitOpRequest.PayloadCase.UPDATE_INTENT ->
                 builder.setUpdateIntent(request.updateIntent)
-            SubmitOpRequest.PayloadCase.DELETE_INTENT ->
-                builder.setDeleteIntent(request.deleteIntent)
-            SubmitOpRequest.PayloadCase.FULFILL_INTENT ->
-                builder.setFulfillIntent(request.fulfillIntent)
             SubmitOpRequest.PayloadCase.UPDATE_INTENT_PARENT ->
                 builder.setUpdateIntentParent(request.updateIntentParent)
             SubmitOpRequest.PayloadCase.ADD_FIELD ->
