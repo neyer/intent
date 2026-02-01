@@ -104,3 +104,90 @@ message SetFieldValue {
 message FulfillIntent {
   int64 id = 1;
 }
+
+// ============================================================================
+// gRPC Service Definition
+// ============================================================================
+
+service IntentService {
+  // Submit an operation (id and timestamp will be assigned by the server)
+  rpc SubmitOp(SubmitOpRequest) returns (SubmitOpResponse);
+
+  // Get an intent by its ID
+  rpc GetIntent(GetIntentRequest) returns (GetIntentResponse);
+
+  // Get the focal scope for an intent
+  rpc GetFocalScope(GetFocalScopeRequest) returns (GetFocalScopeResponse);
+}
+
+// Request to submit an operation - contains just the payload, no id or timestamp
+message SubmitOpRequest {
+  oneof payload {
+    CreateIntent create_intent = 1;
+    UpdateIntentText update_intent = 2;
+    DeleteIntent delete_intent = 3;
+    FulfillIntent fulfill_intent = 4;
+    UpdateIntentParent update_intent_parent = 5;
+    AddField add_field = 6;
+    SetFieldValue set_field_value = 7;
+  }
+}
+
+message SubmitOpResponse {
+  bool success = 1;
+  string message = 2;
+  int64 id = 3;  // The assigned id for the op/intent
+}
+
+message GetIntentRequest {
+  int64 id = 1;
+}
+
+message GetIntentResponse {
+  bool found = 1;
+  IntentProto intent = 2;
+  string error = 3;  // Error message if not found
+}
+
+message GetFocalScopeRequest {
+  int64 id = 1;
+}
+
+message GetFocalScopeResponse {
+  bool found = 1;
+  IntentProto focus = 2;
+  repeated IntentProto ancestry = 3;
+  repeated IntentProto children = 4;
+  string error = 5;  // Error message if not found
+}
+
+// Proto representation of an Intent for API responses
+message IntentProto {
+  int64 id = 1;
+  string text = 2;
+  optional int64 parent_id = 3;
+  optional int64 created_timestamp = 4;
+  optional int64 last_updated_timestamp = 5;
+  bool is_meta = 6;
+  map<string, FieldDetailsProto> fields = 7;
+  map<string, FieldValueProto> field_values = 8;
+}
+
+message FieldDetailsProto {
+  FieldType field_type = 1;
+  bool required = 2;
+  optional string description = 3;
+}
+
+message FieldValueProto {
+  oneof value {
+    string string_value = 1;
+    int32 int32_value = 2;
+    int64 int64_value = 3;
+    float float_value = 4;
+    double double_value = 5;
+    bool bool_value = 6;
+    int64 timestamp_value = 7;
+    int64 intent_ref_value = 8;
+  }
+}
