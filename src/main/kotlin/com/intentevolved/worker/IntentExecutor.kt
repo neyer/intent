@@ -42,7 +42,12 @@ class IntentExecutor(
             System.err.println("  Failed: ${result.output}")
         } else {
             // Intent 50: Log success
-            println("  Done (${result.inputTokens}+${result.outputTokens} tokens)")
+            println("  Done (${result.inputTokens}+${result.outputTokens} tokens, ${result.toolsUsed} tools)")
+
+            // Store the output as a string field
+            if (result.output.isNotEmpty()) {
+                grpcClient.setStringField(intent.id, "output", result.output)
+            }
         }
 
         return result
