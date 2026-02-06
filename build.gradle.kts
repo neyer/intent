@@ -76,6 +76,15 @@ tasks.register<JavaExec>("runServer") {
     args = listOf("50051", "current.pb")
 }
 
+// Task to run the Voluntas gRPC server
+tasks.register<JavaExec>("runVoluntasServer") {
+    group = "application"
+    description = "Run the Voluntas gRPC server"
+    mainClass.set("com.intentevolved.com.intentevolved.voluntas.VoluntasRuntime")
+    classpath = sourceSets["main"].runtimeClasspath
+    args = listOf("50051", "voluntas_current.pb")
+}
+
 // Task to run the terminal client
 tasks.register<JavaExec>("runClient") {
     group = "application"

@@ -1,6 +1,7 @@
 package com.intentevolved.com.intentevolved.voluntas
 
 import com.intentevolved.com.intentevolved.*
+import com.intentevolved.FieldType
 import voluntas.v1.Literal
 import voluntas.v1.Op
 import voluntas.v1.Relationship
@@ -18,6 +19,7 @@ import java.time.Instant
  * SETS_FIELD).
  */
 class VoluntasIntentService private constructor(
+// Some relationship between existing intents.
     private val streamId: String
 ) : IntentService, IntentStateProvider, VoluntasStreamConsumer {
 
@@ -26,6 +28,24 @@ class VoluntasIntentService private constructor(
             val now = Instant.now()
             return now.epochSecond * 1_000_000_000L + now.nano.toLong()
         }
+
+        private val stringToFieldType = mapOf(
+            "STRING" to FieldType.FIELD_TYPE_STRING,
+            "INT32" to FieldType.FIELD_TYPE_INT32,
+            "INT64" to FieldType.FIELD_TYPE_INT64,
+            "FLOAT" to FieldType.FIELD_TYPE_FLOAT,
+            "DOUBLE" to FieldType.FIELD_TYPE_DOUBLE,
+            "BOOL" to FieldType.FIELD_TYPE_BOOL,
+            "TIMESTAMP" to FieldType.FIELD_TYPE_TIMESTAMP,
+            "INTENT_REF" to FieldType.FIELD_TYPE_INTENT_REF,
+        )
+        private val fieldTypeToStringMap = stringToFieldType.entries.associate { (k, v) -> v to k }
+
+        fun fieldTypeFromString(s: String?): FieldType =
+            stringToFieldType[s] ?: FieldType.FIELD_TYPE_UNSPECIFIED
+
+        fun fieldTypeToString(ft: FieldType): String =
+            fieldTypeToStringMap[ft] ?: "UNSPECIFIED"
 
         /**
          * Create a new service with a root intent, emitting bootstrap relationships.
@@ -77,19 +97,7 @@ class VoluntasIntentService private constructor(
             .addParticipants(stringTypeLit)
             .build())
 
-        // 3. Entity 9 = parent field of string intent type
-        //    Relationship(id=9, participants=[DEFINES_FIELD, STRING_INTENT_TYPE, "parent", INTENT_REF])
-        val parentLit = literalStore.getOrCreate("parent")
-        val intentRefLit = literalStore.getOrCreate("INTENT_REF")
-        emitRelationship(Relationship.newBuilder()
-            .setId(9L)
-            .addParticipants(VoluntasIds.DEFINES_FIELD)
-            .addParticipants(VoluntasIds.STRING_INTENT_TYPE)
-            .addParticipants(parentLit)
-            .addParticipants(intentRefLit)
-            .build())
-
-        // 4. Entity 0 = root intent (instantiation of string_intent_type, no parent)
+        // 3. Entity 0 = root intent (instantiation of string_intent_type, no parent)
         //    Relationship(id=0, participants=[INSTANTIATES, STRING_INTENT_TYPE, rootTextLit])
         val rootTextLit = literalStore.getOrCreate(rootIntent)
         emitRelationship(Relationship.newBuilder()
@@ -156,10 +164,11 @@ class VoluntasIntentService private constructor(
     }
 
     private fun handleDefinesField(rel: Relationship, timestamp: Long?) {
-        // participants: [DEFINES_FIELD, typeEntity, nameLit, fieldTypeLit, ...]
+        // participants: [DEFINES_FIELD, targetEntity, nameLit, fieldTypeLit, (requiredLit), (descriptionLit)]
         val id = rel.id.toLong()
+        val participants = rel.participantsList
+
         if (!byId.containsKey(id)) {
-            val participants = rel.participantsList
             val desc = if (participants.size >= 3) {
                 val nameLit = literalStore.getString(participants[2])
                 "DefinesField:${nameLit ?: participants[2]}"
@@ -173,6 +182,25 @@ class VoluntasIntentService private constructor(
                 isMeta = true
             )
         }
+
+        // Register the field on the target entity
+        if (participants.size >= 4) {
+            val targetId = participants[1]
+            val fieldName = literalStore.getString(participants[2]) ?: return
+            val fieldTypeStr = literalStore.getString(participants[3])
+            val fieldType = fieldTypeFromString(fieldTypeStr)
+            val required = if (participants.size >= 5) {
+                val lit = literalStore.getById(participants[4])
+                lit?.hasBoolVal() == true && lit.boolVal
+            } else false
+            val description = if (participants.size >= 6) {
+                literalStore.getString(participants[5])
+            } else null
+
+            val target = byId[targetId] as? IntentImpl
+            target?.addField(fieldName, FieldDetails(fieldType, required, description))
+        }
+
         trackEntityId(id)
     }
 
@@ -371,6 +399,31 @@ class VoluntasIntentService private constructor(
             .addParticipants(fieldNameLit)
             .addParticipants(newParentId)
             .build())
+    }
+
+    fun addField(entityId: Long, fieldName: String, fieldType: FieldType,
+                 required: Boolean = false, description: String? = null) {
+        byId[entityId] ?: throw IllegalArgumentException("No entity with id $entityId")
+
+        val relId = nextEntityId++
+        val fieldNameLit = literalStore.getOrCreate(fieldName)
+        val fieldTypeLit = literalStore.getOrCreate(fieldTypeToString(fieldType))
+
+        val builder = Relationship.newBuilder()
+            .setId(relId)
+            .addParticipants(VoluntasIds.DEFINES_FIELD)
+            .addParticipants(entityId)
+            .addParticipants(fieldNameLit)
+            .addParticipants(fieldTypeLit)
+
+        if (required || description != null) {
+            builder.addParticipants(literalStore.getOrCreate(required))
+        }
+        if (description != null) {
+            builder.addParticipants(literalStore.getOrCreate(description))
+        }
+
+        emitRelationship(builder.build())
     }
 
     override fun getById(id: Long): Intent? = byId[id]

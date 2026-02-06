@@ -301,7 +301,7 @@ class VoluntasIntentServiceTest {
 
     @Test
     fun `bootstrap creates meta intents for type and field definitions`() {
-        // Bootstrap creates entities 7 (type), 8 (text field), 9 (parent field)
+        // Bootstrap creates entities 7 (type), 8 (text field)
         val typeEntity = service.getById(VoluntasIds.STRING_INTENT_TYPE)
         assertNotNull(typeEntity)
         assertTrue(typeEntity!!.isMeta())
@@ -309,10 +309,6 @@ class VoluntasIntentServiceTest {
         val textFieldEntity = service.getById(8L)
         assertNotNull(textFieldEntity)
         assertTrue(textFieldEntity!!.isMeta())
-
-        val parentFieldEntity = service.getById(9L)
-        assertNotNull(parentFieldEntity)
-        assertTrue(parentFieldEntity!!.isMeta())
     }
 
     @Test

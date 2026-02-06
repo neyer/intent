@@ -126,3 +126,33 @@ message Stream {
 //   0x8000000000000004: "sets_field"
 //   0x8000000000000005: "binds_name"
 //   0x8000000000000006: "depends_on"
+
+// ============================================================================
+// gRPC Service Definition
+// ============================================================================
+
+service VoluntasService {
+  // Submit a raw Relationship to the Voluntas stream
+  rpc SubmitRelationship(SubmitRelationshipRequest) returns (SubmitRelationshipResponse);
+
+  // Submit a raw Literal to the Voluntas stream
+  rpc SubmitLiteral(SubmitLiteralRequest) returns (SubmitLiteralResponse);
+}
+
+message SubmitRelationshipRequest {
+  Relationship relationship = 1;
+}
+
+message SubmitRelationshipResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message SubmitLiteralRequest {
+  Literal literal = 1;
+}
+
+message SubmitLiteralResponse {
+  bool success = 1;
+  string message = 2;
+}

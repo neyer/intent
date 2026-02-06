@@ -10,6 +10,6 @@ CLASSPATH=$(./gradlew --quiet printRuntimeClasspath | tail -1)
 
 # Default arguments
 PORT="${1:-50051}"
-FILE="${2:-current.pb}"
+FILE="${2:-voluntas_current.pb}"
 
-exec java -cp "$CLASSPATH" com.intentevolved.server.IntentServer "$PORT" "$FILE"
+exec java -cp "$CLASSPATH" com.intentevolved.com.intentevolved.voluntas.VoluntasRuntime "$PORT" "$FILE"
