@@ -1,0 +1,128 @@
+// A.M.D.G
+syntax = "proto3";
+
+// Voluntas Protocol v1
+//
+// A universal protocol for representing intentional structure as computational relationships.
+//
+// CORE INSIGHT:
+// Everything - types, instances, operations, metadata, commentary, execution results -
+// can be represented as relationships between participants. By making relationships
+// the atomic primitive, we create a unified substrate for expressing, evolving, and
+// reasoning about intent.
+//
+// DESIGN PRINCIPLES:
+//
+// 1. Relationships are first-class
+//    Every relationship has an ID and can be referenced by other relationships.
+//    This enables meta-commentary: you can comment on decisions, question operations,
+//    and build arbitrary graphs of reasoning.
+//
+// 2. Everything is referenceable
+//    Participants are identified by uint64 IDs. The high bit distinguishes two realms:
+//    - Entities (bit 0): Mutable things that evolve through relationships
+//    - Literals (bit 1): Immutable values that are content-addressed
+//
+// 3. Event-sourced by default
+//    The stream is append-only. Current state is derived by replaying relationships.
+//    This preserves complete history: what was intended, what changed, why it changed.
+//
+// 4. Self-describing through bootstrap
+//    The type system is not hardcoded - it emerges from relationships. Core types like
+//    "defines_type" and "instantiates" are themselves entities that can be referenced,
+//    extended, and reasoned about.
+//
+// 5. Protocol enables interoperability
+//    Multiple agents (humans, AIs, tools, runtimes) write to the same stream.
+//    Same language, different interpretations: execution, analysis, documentation,
+//    validation all consume the same relationship structure.
+//
+// INTENTIONAL STRUCTURE:
+// This protocol represents a programming language where:
+// - Syntax: Typed relationships with participants
+// - Semantics: Domain-specific (software planning, legal reasoning, system architecture)
+// - Execution: Interpreters materialize artifacts (code, docs, analysis) from streams
+// - Runtime: Execution results (successes, failures, observations) are relationships
+//
+// The stream contains not just what was built, but why it was built that way,
+// what alternatives were considered, what failed, and how understanding evolved.
+//
+// INSPIRATION:
+// Like Lisp made code programmable through uniform representation (S-expressions),
+// Voluntas makes intent programmable through uniform representation (relationships).
+// Like event sourcing made state changes explicit and queryable,
+// Voluntas makes intentional evolution explicit and queryable.
+//
+
+package voluntas.v1;
+
+option java_multiple_files = true;
+
+// Core Protocol: Everything is a relationship between participants.
+//
+// ID Space:
+//   0x0000000000000000 - 0x7FFFFFFFFFFFFFFF : Entities (high bit = 0)
+//   0x8000000000000000 - 0xFFFFFFFFFFFFFFFF : Literals (high bit = 1)
+//
+// Participant Convention:
+//   participants[0] is ALWAYS the relationship type
+//   Remaining participants are interpreted according to the relationship type
+
+message Literal {
+  // ID with high bit set (0x8000000000000000 | n)
+  uint64 id = 1;
+
+  // The immutable value this literal represents
+  oneof value {
+    string string_val = 2;
+    int64 int_val = 3;
+    double double_val = 4;
+    bool bool_val = 5;
+    bytes bytes_val = 6;
+  }
+}
+
+message Relationship {
+  // ID with high bit clear
+  uint64 id = 1;
+
+  // Participants in this relationship
+  // participants[0] = relationship type (entity ID)
+  // participants[1..n] = arguments (entity or literal IDs)
+  repeated uint64 participants = 2;
+}
+
+message Op {
+  // when this relationship or literal was invoked
+  int64 timestamp = 1;
+  oneof payload {
+    Literal literal = 2;
+    Relationship relationship = 3;
+  }
+}
+
+message Stream {
+  // Unique identifier for this stream
+  string stream_id = 1;
+
+  // Ordered sequence of invocations, either literals or relationships
+  repeated Op ops = 2;
+}
+
+// Bootstrap constants (not part of the wire format, but documented here)
+//
+// Reserved Entity IDs (1-999):
+//   1: defines_type      - Creates a new type entity
+//   2: defines_field     - Adds a field to a type
+//   3: instantiates      - Creates an instance of a type
+//   4: sets_field        - Sets a field value on an entity
+//   5: binds_name        - Associates a name with an entity
+//   6: depends_on        - Asserts dependency between entities
+//
+// Reserved Literal IDs for bootstrap names:
+//   0x8000000000000001: "defines_type"
+//   0x8000000000000002: "defines_field"
+//   0x8000000000000003: "instantiates"
+//   0x8000000000000004: "sets_field"
+//   0x8000000000000005: "binds_name"
+//   0x8000000000000006: "depends_on"

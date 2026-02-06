@@ -73,7 +73,7 @@ class IntentServiceImpl private constructor(
             text = streamBuilder.header.rootIntent,
             id = 0,
             parentId = null,
-            serviceImpl = this,
+            stateProvider = this,
             isMeta = false
         )
         byId[0] = rootIntentObj
@@ -112,7 +112,7 @@ class IntentServiceImpl private constructor(
             text = text,
             id = id,
             parentId = parentId,
-            serviceImpl = this,
+            stateProvider = this,
             createdTimestamp = timestamp,
             isMeta = true
         )
@@ -147,7 +147,7 @@ class IntentServiceImpl private constructor(
             text = create.text,
             id = id,
             parentId = parentId,
-            serviceImpl = this,
+            stateProvider = this,
             createdTimestamp = timestamp,
             isMeta = false
         )
@@ -167,7 +167,7 @@ class IntentServiceImpl private constructor(
             text = update.newText,
             id = update.id,
             parentId = existingImpl.parentId,
-            serviceImpl = this,
+            stateProvider = this,
             createdTimestamp = existing.createdTimestamp(),
             lastUpdatedTimestamp = timestamp,
             fields = existingImpl.fields().toMutableMap(),
@@ -200,7 +200,7 @@ class IntentServiceImpl private constructor(
             parentId = newParentId,
             createdTimestamp = existing.createdTimestamp(),
             lastUpdatedTimestamp = timestamp,
-            serviceImpl = this,
+            stateProvider = this,
             fields = existingImpl.fields().toMutableMap(),
             values = existingImpl.fieldValues().toMutableMap(),
             isMeta = existing.isMeta()
@@ -505,7 +505,7 @@ class IntentImpl(
     private val text: String,
     private val id: Long,
     internal val parentId: Long? = null,
-    private val serviceImpl: IntentServiceImpl,
+    private val stateProvider: IntentStateProvider,
     private val createdTimestamp: Long? = null,
     private val lastUpdatedTimestamp: Long? = null,
     private val fields: MutableMap<String, FieldDetails> = mutableMapOf(),
@@ -514,7 +514,7 @@ class IntentImpl(
 ) : Intent {
     override fun text() = text
     override fun id() = id
-    override fun parent() = if (parentId == null) null else serviceImpl.getById(parentId)
+    override fun parent() = if (parentId == null) null else stateProvider.getById(parentId)
     override fun children(): List<Intent> = listOf()
     override fun createdTimestamp() = createdTimestamp
     override fun lastUpdatedTimestamp() = lastUpdatedTimestamp
