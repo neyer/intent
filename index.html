@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
+            color: #333;
+            padding: 20px;
+        }
+        
+        .game-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #4a4a4a;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .status-display {
+            font-size: 1.3em;
+            font-weight: 500;
+            color: #555;
+            margin: 25px auto;
+            padding: 15px 25px;
+            background: linear-gradient(45deg, #f8f9fa, #e9ecef);
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            max-width: 300px;
+            transition: all 0.3s ease;
+        }
+        
+        .status-display.winner {
+            background: linear-gradient(45deg, #d4edda, #c3e6cb);
+            color: #155724;
+            transform: scale(1.05);
+        }
+        
+        .status-display.draw {
+            background: linear-gradient(45deg, #fff3cd, #ffeaa7);
+            color: #856404;
+            transform: scale(1.05);
+        }
+        
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 3px;
+            margin: 30px auto;
+            width: fit-content;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.1);
+            border: 3px solid #333;
+        }
+        
+        .cell {
+            /* Consistent sizing */
+            width: 100px;
+            height: 100px;
+            
+            /* Layout and content positioning */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            
+            /* Typography */
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #333;
+            
+            /* Cursor pointer for interactivity */
+            cursor: pointer;
+            
+            /* Border styling */
+            border: 2px solid #666;
+            border-radius: 10px;
+            
+            /* Background and visual appearance */
+            background: linear-gradient(145deg, #ffffff, #f0f0f0);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            
+            /* Smooth transitions for all hover effects */
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            
+            /* Ensure consistent appearance */
+            user-select: none;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Enhanced hover effects */
+        .cell:hover {
+            /* Background change with gradient */
+            background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+            
+            /* Subtle lift effect */
+            transform: translateY(-2px);
+            
+            /* Enhanced shadow for depth */
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+            
+            /* Border color change */
+            border-color: #333;
+            
+            /* Slight scale for emphasis */
+            transform: translateY(-2px) scale(1.02);
+        }
+        
+        /* Active state for click feedback */
+        .cell:active {
+            transform: translateY(0) scale(0.98);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: all 0.1s ease;
+        }
+        
+        /* Filled cells shouldn't have pointer cursor */
+        .cell:not(:empty) {
+            cursor: default;
+        }
+        
+        /* Hover effect only on empty cells */
+        .cell:empty:hover {
+            background: linear-gradient(145deg, #e3f2fd, #bbdefb);
+            border-color: #2196f3;
+        }
+        
+        /* Add a subtle pulse animation for empty cells */
+        .cell:empty {
+            position: relative;
+        }
+        
+        .cell:empty::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            background: rgba(33, 150, 243, 0.1);
+            border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .cell:empty:hover::before {
+            transform: translate(-50%, -50%) scale(1);
+        }
+        
+        /* Game state styling for filled cells */
+        .cell.x {
+            color: #e53e3e;
+            text-shadow: 0 2px 4px rgba(229, 62, 62, 0.3);
+        }
+        
+        .cell.o {
+            color: #3182ce;
+            text-shadow: 0 2px 4px rgba(49, 130, 206, 0.3);
+        }
+        
+        .new-game-button {
+            margin-top: 25px;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            font-weight: 600;
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .new-game-button:hover {
+            background: linear-gradient(45deg, #218838, #1ea085);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+        }
+        
+        .new-game-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(40, 167, 69, 0.3);
+        }
+        
+        /* Responsive design */
+        @media (max-width: 480px) {
+            .game-container {
+                padding: 25px;
+                margin: 10px;
+            }
+            
+            h1 {
+                font-size: 2em;
+                margin-bottom: 20px;
+            }
+            
+            .game-board {
+                grid-template-columns: repeat(3, 80px);
+                grid-template-rows: repeat(3, 80px);
+                gap: 3px;
+                border: 2px solid #333;
+            }
+            
+            .cell {
+                width: 80px;
+                height: 80px;
+                font-size: 1.8em;
+                border: 2px solid #666;
+            }
+        }
+        
+        /* Add subtle animation to the background */
+        @keyframes backgroundShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
+            background-size: 400% 400%;
+            animation: backgroundShift 15s ease infinite;
+            z-index: -1;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Tic Tac Toe</h1>
+        
+        <div class="status-display" id="statusDisplay">
+            Player X's Turn
+        </div>
+        
+        <div class="game-board" id="gameBoard">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
+        </div>
+        
+        <button class="new-game-button" id="newGameButton">New Game</button>
+    </div>
+
+    <script>
+        let currentPlayer = 'X';
+        let gameBoard = Array(9).fill('');
+        let gameActive = true;
+
+        const statusDisplay = document.getElementById('statusDisplay');
+        const cells = document.querySelectorAll('.cell');
+        const newGameButton = document.getElementById('newGameButton');
+
+        const winningConditions = [
+            [0, 1, 2],
+            [3, 4, 5],
+            [6, 7, 8],
+            [0, 3, 6],
+            [1, 4, 7],
+            [2, 5, 8],
+            [0, 4, 8],
+            [2, 4, 6]
+        ];
+
+        function handleCellClick(clickedCell, clickedCellIndex) {
+            if (gameBoard[clickedCellIndex] !== '' || !gameActive) {
+                return;
+            }
+
+            gameBoard[clickedCellIndex] = currentPlayer;
+            clickedCell.textContent = currentPlayer;
+            clickedCell.classList.add(currentPlayer.toLowerCase());
+
+            checkResult();
+        }
+
+        function checkResult() {
+            let roundWon = false;
+            for (let i = 0; i < winningConditions.length; i++) {
+                const [a, b, c] = winningConditions[i];
+                if (gameBoard[a] && gameBoard[a] === gameBoard[b] && gameBoard[a] === gameBoard[c]) {
+                    roundWon = true;
+                    break;
+                }
+            }
+
+            if (roundWon) {
+                statusDisplay.textContent = `Player ${currentPlayer} Wins!`;
+                statusDisplay.className = 'status-display winner';
+                gameActive = false;
+                return;
+            }
+
+            if (!gameBoard.includes('')) {
+                statusDisplay.textContent = 'Game Draw!';
+                statusDisplay.className = 'status-display draw';
+                gameActive = false;
+                return;
+            }
+
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            statusDisplay.textContent = `Player ${currentPlayer}'s Turn`;
+        }
+
+        function resetGame() {
+            currentPlayer = 'X';
+            gameBoard = Array(9).fill('');
+            gameActive = true;
+            statusDisplay.textContent = `Player ${currentPlayer}'s Turn`;
+            statusDisplay.className = 'status-display';
+            cells.forEach(cell => {
+                cell.textContent = '';
+                cell.classList.remove('x', 'o');
+            });
+        }
+
+        cells.forEach((cell, index) => {
+            cell.addEventListener('click', () => handleCellClick(cell, index));
+        });
+
+        newGameButton.addEventListener('click', resetGame);
+    </script>
+</body>
+</html>

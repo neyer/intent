@@ -17,6 +17,7 @@ val grpcKotlinVersion = "1.4.1"
 dependencies {
     implementation("com.google.protobuf:protobuf-kotlin:3.25.3")
     implementation("com.googlecode.lanterna:lanterna:3.1.1")
+    implementation("com.google.code.gson:gson:2.10.1")  // JSON parsing
 
     // gRPC dependencies
     implementation("io.grpc:grpc-netty-shaded:$grpcVersion")

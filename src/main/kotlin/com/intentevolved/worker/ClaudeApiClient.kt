@@ -1,5 +1,7 @@
 package com.intentevolved.worker
 
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import java.io.File
 import java.net.URI
 import java.net.http.HttpClient
@@ -17,6 +19,7 @@ class ClaudeApiClient(
 ) {
     private val httpClient = HttpClient.newHttpClient()
     private val apiUrl = "https://api.anthropic.com/v1/messages"
+    private val gson = Gson()
 
     // Track token usage for cost reporting
     var totalInputTokens: Long = 0
@@ -57,7 +60,11 @@ Working directory: ${workingDir.absolutePath}"""
             if (context.isNotEmpty()) {
                 append("Context:\n$context\n\n")
             }
-            append("Task: $intentText\n\nExecute this task using the available tools.")
+            append("Task: $intentText\n\n")
+            append("You MUST complete this task by using the available tools. ")
+            append("If the task mentions creating, adding, implementing, or writing anything, ")
+            append("you must use write_file to actually create or modify the file on disk. ")
+            append("Do not just respond with explanations - do the actual work with tools.")
         }
 
         val tools = """[
@@ -133,21 +140,54 @@ Working directory: ${workingDir.absolutePath}"""
                 }
             """.trimIndent()
 
+            // Debug: print first request
+            if (iterations == 1) {
+                System.err.println("\n=== First API Request ===")
+                System.err.println("System prompt length: ${systemPrompt.length}")
+                System.err.println("User message: ${userMessage.take(200)}...")
+                System.err.println("Tools count: ${tools.count { it == '{' }}")
+            }
+
             val response = makeRequest(requestBody)
             if (!response.success) {
                 return ExecutionResult(false, response.error ?: "Unknown error", totalIn, totalOut)
             }
 
             val body = response.body ?: ""
-            totalIn += extractJsonNumber(body, "input_tokens")
-            totalOut += extractJsonNumber(body, "output_tokens")
+            val jsonResponse = gson.fromJson(body, JsonObject::class.java)
 
-            val stopReason = extractJsonField(body, "stop_reason")
+            // Extract usage stats
+            val usage = jsonResponse.getAsJsonObject("usage")
+            totalIn += usage?.get("input_tokens")?.asLong ?: 0
+            totalOut += usage?.get("output_tokens")?.asLong ?: 0
+
+            val stopReason = jsonResponse.get("stop_reason")?.asString
 
             // Extract all content blocks
-            val toolUses = extractToolUses(body)
-            val textContent = extractAllText(body)
+            val content = jsonResponse.getAsJsonArray("content")
+            val toolUses = mutableListOf<ToolUse>()
+            val textParts = mutableListOf<String>()
 
+            for (item in content) {
+                val obj = item.asJsonObject
+                when (obj.get("type")?.asString) {
+                    "text" -> {
+                        textParts.add(obj.get("text")?.asString ?: "")
+                    }
+                    "tool_use" -> {
+                        val id = obj.get("id")?.asString ?: continue
+                        val name = obj.get("name")?.asString ?: continue
+                        val input = obj.getAsJsonObject("input")
+                        val inputMap = mutableMapOf<String, String>()
+                        for ((key, value) in input.entrySet()) {
+                            inputMap[key] = value.asString
+                        }
+                        toolUses.add(ToolUse(id, name, inputMap))
+                    }
+                }
+            }
+
+            val textContent = textParts.joinToString("\n")
             if (textContent.isNotEmpty()) {
                 finalOutput = textContent
             }
@@ -158,8 +198,8 @@ Working directory: ${workingDir.absolutePath}"""
             }
 
             // Add assistant's response to messages
-            val contentBlocks = extractContentArray(body)
-            messages.add("""{"role": "assistant", "content": $contentBlocks}""")
+            val contentJson = gson.toJson(content)
+            messages.add("""{"role": "assistant", "content": $contentJson}""")
 
             // Execute tools and add results
             val toolResults = toolUses.map { tool ->
@@ -222,144 +262,6 @@ Working directory: ${workingDir.absolutePath}"""
     }
 
     private data class ToolUse(val id: String, val name: String, val input: Map<String, String>)
-
-    private fun extractToolUses(json: String): List<ToolUse> {
-        val results = mutableListOf<ToolUse>()
-        var idx = 0
-        while (true) {
-            idx = json.indexOf(""""type": "tool_use"""", idx)
-            if (idx == -1) break
-
-            // Find the start of this object
-            var braceStart = idx
-            while (braceStart > 0 && json[braceStart] != '{') braceStart--
-
-            // Find matching end brace
-            var depth = 1
-            var braceEnd = braceStart + 1
-            while (braceEnd < json.length && depth > 0) {
-                when (json[braceEnd]) {
-                    '{' -> depth++
-                    '}' -> depth--
-                }
-                braceEnd++
-            }
-
-            val block = json.substring(braceStart, braceEnd)
-            val id = extractSimpleField(block, "id")
-            val name = extractSimpleField(block, "name")
-
-            // Extract input object
-            val inputStart = block.indexOf(""""input":""")
-            if (inputStart != -1 && id != null && name != null) {
-                var iStart = block.indexOf('{', inputStart)
-                if (iStart != -1) {
-                    var iDepth = 1
-                    var iEnd = iStart + 1
-                    while (iEnd < block.length && iDepth > 0) {
-                        when (block[iEnd]) {
-                            '{' -> iDepth++
-                            '}' -> iDepth--
-                        }
-                        iEnd++
-                    }
-                    val inputBlock = block.substring(iStart + 1, iEnd - 1)
-                    val input = parseSimpleJsonObject(inputBlock)
-                    results.add(ToolUse(id, name, input))
-                }
-            }
-            idx = braceEnd
-        }
-        return results
-    }
-
-    private fun extractSimpleField(json: String, field: String): String? {
-        val key = """"$field": """"
-        val start = json.indexOf(key)
-        if (start == -1) return null
-        val valStart = start + key.length
-        val valEnd = findStringEnd(json, valStart)
-        return unescapeJson(json.substring(valStart, valEnd))
-    }
-
-    private fun findStringEnd(s: String, start: Int): Int {
-        var i = start
-        while (i < s.length) {
-            when (s[i]) {
-                '\\' -> i += 2  // skip escaped char
-                '"' -> return i
-                else -> i++
-            }
-        }
-        return s.length
-    }
-
-    private fun parseSimpleJsonObject(s: String): Map<String, String> {
-        val result = mutableMapOf<String, String>()
-        var idx = 0
-        while (true) {
-            // Find next key
-            val keyStart = s.indexOf('"', idx)
-            if (keyStart == -1) break
-            val keyEnd = s.indexOf('"', keyStart + 1)
-            if (keyEnd == -1) break
-            val key = s.substring(keyStart + 1, keyEnd)
-
-            // Find value (skip colon, whitespace)
-            val colonIdx = s.indexOf(':', keyEnd)
-            if (colonIdx == -1) break
-
-            var valIdx = colonIdx + 1
-            while (valIdx < s.length && s[valIdx].isWhitespace()) valIdx++
-
-            if (valIdx < s.length && s[valIdx] == '"') {
-                val valStart = valIdx + 1
-                val valEnd = findStringEnd(s, valStart)
-                result[key] = unescapeJson(s.substring(valStart, valEnd))
-                idx = valEnd + 1
-            } else {
-                idx = valIdx + 1
-            }
-        }
-        return result
-    }
-
-    private fun extractAllText(json: String): String {
-        val texts = mutableListOf<String>()
-        var idx = 0
-        while (true) {
-            idx = json.indexOf(""""type": "text"""", idx)
-            if (idx == -1) break
-
-            val textKey = json.indexOf(""""text": """", idx)
-            if (textKey != -1 && textKey < idx + 100) {
-                val valStart = textKey + 9
-                val valEnd = findStringEnd(json, valStart)
-                texts.add(unescapeJson(json.substring(valStart, valEnd)))
-                idx = valEnd
-            } else {
-                idx += 10
-            }
-        }
-        return texts.joinToString("\n")
-    }
-
-    private fun extractContentArray(json: String): String {
-        val start = json.indexOf(""""content": [""")
-        if (start == -1) return "[]"
-
-        val arrStart = json.indexOf('[', start)
-        var depth = 1
-        var arrEnd = arrStart + 1
-        while (arrEnd < json.length && depth > 0) {
-            when (json[arrEnd]) {
-                '[' -> depth++
-                ']' -> depth--
-            }
-            arrEnd++
-        }
-        return json.substring(arrStart, arrEnd)
-    }
 
     private fun executeTool(name: String, input: Map<String, String>): String {
         return try {
@@ -433,40 +335,6 @@ Working directory: ${workingDir.absolutePath}"""
             .replace("\t", "\\t") + "\""
     }
 
-    private fun extractJsonField(json: String, field: String): String? {
-        // Simple extraction - looks for "field": "value" pattern
-        val key = """"$field""""
-        var idx = json.indexOf(key)
-        if (idx == -1) return null
-
-        // Find the colon after the field name
-        val colonIdx = json.indexOf(':', idx + key.length)
-        if (colonIdx == -1) return null
-
-        // Skip whitespace after colon
-        var valIdx = colonIdx + 1
-        while (valIdx < json.length && json[valIdx].isWhitespace()) valIdx++
-
-        // Check if it's a string value
-        if (valIdx >= json.length || json[valIdx] != '"') return null
-
-        val valStart = valIdx + 1
-        val valEnd = findStringEnd(json, valStart)
-        return unescapeJson(json.substring(valStart, valEnd))
-    }
-
-    private fun extractJsonNumber(json: String, field: String): Long {
-        val pattern = """"$field"\s*:\s*(\d+)""".toRegex()
-        return pattern.find(json)?.groupValues?.get(1)?.toLongOrNull() ?: 0
-    }
-
-    private fun unescapeJson(s: String): String {
-        return s.replace("\\n", "\n")
-            .replace("\\r", "\r")
-            .replace("\\t", "\t")
-            .replace("\\\"", "\"")
-            .replace("\\\\", "\\")
-    }
 }
 
 /**

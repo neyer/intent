@@ -60,22 +60,25 @@ fun main(args: Array<String>) {
         println("Fetching intent tree for intent ${workerArgs.intentId}...")
         val allIntents = intentFetcher.fetchIntentTree(workerArgs.intentId)
 
-        // Intent 57: Skip intents that are already marked done=true
-        val pendingIntents = intentFetcher.filterIncomplete(allIntents)
+        // Get only leaf intents (those without children) - parents are just organizational
+        val leafIntents = intentFetcher.getLeafIntents(workerArgs.intentId)
 
-        if (pendingIntents.isEmpty()) {
+        // Intent 57: Skip intents that are already marked done=true
+        val pendingLeafIntents = intentFetcher.filterIncomplete(leafIntents)
+
+        if (pendingLeafIntents.isEmpty()) {
             println("All intents are already complete!")
             return
         }
 
-        println("Found ${pendingIntents.size} pending intents (${allIntents.size - pendingIntents.size} already done)")
+        println("Found ${allIntents.size} total intents, ${leafIntents.size} leaf intents, ${pendingLeafIntents.size} pending")
 
         // Build parent context map
         val contextMap = allIntents.associate { it.id to it.text }
 
         // Intent 56: For each sub-intent in order: mark started, execute with Claude, mark finished
-        println("\nExecuting intents...")
-        val summary = intentExecutor.executeAll(pendingIntents, contextMap)
+        println("\nExecuting leaf intents...")
+        val summary = intentExecutor.executeAll(pendingLeafIntents, contextMap)
 
         // Intent 58: Print summary of executed intents on completion
         println("\n=== Execution Summary ===")
