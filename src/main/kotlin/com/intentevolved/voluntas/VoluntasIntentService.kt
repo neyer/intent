@@ -16,7 +16,7 @@ import java.time.Instant
  *
  * All intent operations are translated into Relationships whose participants[0]
  * identifies the relationship type (DEFINES_TYPE, DEFINES_FIELD, INSTANTIATES,
- * SETS_FIELD).
+ * SETS_FIELD, ADDS_PARTICIPANT).
  */
 class VoluntasIntentService private constructor(
 // Some relationship between existing intents.
@@ -141,10 +141,11 @@ class VoluntasIntentService private constructor(
         if (participants.isEmpty()) return
 
         when (participants[0]) {
-            VoluntasIds.DEFINES_TYPE  -> handleDefinesType(rel)
-            VoluntasIds.DEFINES_FIELD -> handleDefinesField(rel, timestamp)
-            VoluntasIds.INSTANTIATES  -> handleInstantiates(rel, timestamp)
-            VoluntasIds.SETS_FIELD    -> handleSetsField(rel, timestamp)
+            VoluntasIds.DEFINES_TYPE      -> handleDefinesType(rel)
+            VoluntasIds.DEFINES_FIELD     -> handleDefinesField(rel, timestamp)
+            VoluntasIds.INSTANTIATES      -> handleInstantiates(rel, timestamp)
+            VoluntasIds.SETS_FIELD        -> handleSetsField(rel, timestamp)
+            VoluntasIds.ADDS_PARTICIPANT  -> handleAddsParticipant(rel, timestamp)
         }
     }
 
@@ -155,7 +156,6 @@ class VoluntasIntentService private constructor(
             byId[id] = IntentImpl(
                 text = "Type:${id}",
                 id = id,
-                parentId = null,
                 stateProvider = this,
                 isMeta = true
             )
@@ -173,10 +173,11 @@ class VoluntasIntentService private constructor(
                 val nameLit = literalStore.getString(participants[2])
                 "DefinesField:${nameLit ?: participants[2]}"
             } else "DefinesField:$id"
+            val targetId = if (participants.size >= 2) participants[1] else null
             byId[id] = IntentImpl(
                 text = desc,
                 id = id,
-                parentId = if (participants.size >= 2) participants[1].toLong() else null,
+                participantIds = if (targetId != null) mutableListOf(targetId) else mutableListOf(),
                 stateProvider = this,
                 createdTimestamp = timestamp,
                 isMeta = true
@@ -218,7 +219,7 @@ class VoluntasIntentService private constructor(
             val intent = IntentImpl(
                 text = text,
                 id = entityId,
-                parentId = parentEntityId?.toLong(),
+                participantIds = if (parentEntityId != null) mutableListOf(parentEntityId) else mutableListOf(),
                 stateProvider = this,
                 createdTimestamp = timestamp,
                 isMeta = false
@@ -226,16 +227,13 @@ class VoluntasIntentService private constructor(
             byId[entityId] = intent
 
             if (parentEntityId != null) {
-                val childList = childrenById.getValue(parentEntityId)
-                childList.add(entityId)
-                childrenById[parentEntityId] = childList
+                linkChild(parentEntityId, entityId)
             }
         } else {
             // Generic instantiation → meta intent
             byId[entityId] = IntentImpl(
                 text = "Instance:${entityId} of type:${typeId}",
                 id = entityId,
-                parentId = null,
                 stateProvider = this,
                 createdTimestamp = timestamp,
                 isMeta = true
@@ -261,7 +259,7 @@ class VoluntasIntentService private constructor(
                 val updated = IntentImpl(
                     text = newText,
                     id = targetId,
-                    parentId = existing.parentId,
+                    participantIds = existing.participantIds.toMutableList(),
                     stateProvider = this,
                     createdTimestamp = existing.createdTimestamp(),
                     lastUpdatedTimestamp = timestamp,
@@ -273,22 +271,28 @@ class VoluntasIntentService private constructor(
             }
             "parent" -> {
                 val newParentId = valueLitId // For parent, the value is an entity ID, not a literal
-                val oldParentId = existing.parentId
+                val oldParentId = existing.participantIds.firstOrNull()
 
                 // Remove from old parent
                 if (oldParentId != null) {
-                    childrenById[oldParentId]?.remove(targetId)
+                    unlinkChild(oldParentId, targetId)
                 }
 
                 // Add to new parent
-                val childList = childrenById.getValue(newParentId)
-                childList.add(targetId)
-                childrenById[newParentId] = childList
+                linkChild(newParentId, targetId)
+
+                // Replace the first participant (primary parent)
+                val newParticipants = existing.participantIds.toMutableList()
+                if (newParticipants.isNotEmpty()) {
+                    newParticipants[0] = newParentId
+                } else {
+                    newParticipants.add(newParentId)
+                }
 
                 val updated = IntentImpl(
                     text = existing.text(),
                     id = targetId,
-                    parentId = newParentId,
+                    participantIds = newParticipants,
                     stateProvider = this,
                     createdTimestamp = existing.createdTimestamp(),
                     lastUpdatedTimestamp = timestamp,
@@ -321,13 +325,65 @@ class VoluntasIntentService private constructor(
             byId[relId] = IntentImpl(
                 text = "SetsField:$fieldName on $targetId",
                 id = relId,
-                parentId = targetId,
+                participantIds = mutableListOf(targetId),
                 stateProvider = this,
                 createdTimestamp = timestamp,
                 isMeta = true
             )
         }
         trackEntityId(relId)
+    }
+
+    /**
+     * Handle ADDS_PARTICIPANT relationship.
+     * participants: [ADDS_PARTICIPANT, targetEntityId, participantToAddId, (indexLit)]
+     */
+    private fun handleAddsParticipant(rel: Relationship, timestamp: Long?) {
+        val participants = rel.participantsList
+        if (participants.size < 3) return
+
+        val targetId = participants[1]
+        val participantToAdd = participants[2]
+        val existing = byId[targetId] as? IntentImpl ?: return
+
+        val index: Int? = if (participants.size >= 4) {
+            val indexLitId = participants[3]
+            val lit = literalStore.getById(indexLitId)
+            lit?.intVal?.toInt()
+        } else null
+
+        existing.addParticipant(participantToAdd, index)
+
+        // Update childrenById: the new participant now has targetId as a child
+        linkChild(participantToAdd, targetId)
+
+        // Create meta-intent for the relationship itself
+        val relId = rel.id.toLong()
+        if (!byId.containsKey(relId)) {
+            byId[relId] = IntentImpl(
+                text = "AddsParticipant:$participantToAdd to $targetId",
+                id = relId,
+                participantIds = mutableListOf(targetId),
+                stateProvider = this,
+                createdTimestamp = timestamp,
+                isMeta = true
+            )
+        }
+        trackEntityId(relId)
+    }
+
+    // --- childrenById helpers ---
+
+    private fun linkChild(parentId: Long, childId: Long) {
+        val childList = childrenById.getValue(parentId)
+        if (!childList.contains(childId)) {
+            childList.add(childId)
+        }
+        childrenById[parentId] = childList
+    }
+
+    private fun unlinkChild(parentId: Long, childId: Long) {
+        childrenById[parentId]?.remove(childId)
     }
 
     private fun trackEntityId(id: Long) {
@@ -442,6 +498,31 @@ class VoluntasIntentService private constructor(
             .build())
     }
 
+    /**
+     * Add a participant to an intent.
+     *
+     * @param intentId the intent gaining a new participant
+     * @param participantId the ID of the participant to add
+     * @param index optional index where to insert; defaults to the end of the list
+     */
+    fun addParticipant(intentId: Long, participantId: Long, index: Int? = null) {
+        byId[intentId] ?: throw IllegalArgumentException("No intent with id $intentId")
+
+        val relId = nextEntityId++
+        val builder = Relationship.newBuilder()
+            .setId(relId)
+            .addParticipants(VoluntasIds.ADDS_PARTICIPANT)
+            .addParticipants(intentId)
+            .addParticipants(participantId)
+
+        if (index != null) {
+            val indexLit = literalStore.getOrCreate(index.toLong())
+            builder.addParticipants(indexLit)
+        }
+
+        emitRelationship(builder.build())
+    }
+
     override fun getById(id: Long): Intent? = byId[id]
 
     override fun getFocalScope(id: Long): FocalScope {
@@ -489,6 +570,8 @@ class VoluntasIntentService private constructor(
                 "defined field on entity ${if (participants.size >= 2) participants[1] else "?"}"
             participants.isNotEmpty() && participants[0] == VoluntasIds.DEFINES_TYPE ->
                 "defined type ${relationship.id}"
+            participants.isNotEmpty() && participants[0] == VoluntasIds.ADDS_PARTICIPANT ->
+                "added participant to entity ${if (participants.size >= 2) participants[1] else "?"}"
             else -> "applied relationship ${relationship.id}"
         }
         return CommandResult(desc)

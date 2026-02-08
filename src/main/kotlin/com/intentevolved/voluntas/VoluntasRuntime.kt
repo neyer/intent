@@ -222,6 +222,7 @@ fun intentToProto(intent: Intent): IntentProto {
     intent.parent()?.let { builder.setParentId(it.id()) }
     intent.createdTimestamp()?.let { builder.setCreatedTimestamp(it) }
     intent.lastUpdatedTimestamp()?.let { builder.setLastUpdatedTimestamp(it) }
+    builder.addAllParticipantIds(intent.participantIds())
 
     intent.fields().forEach { (name, details) ->
         builder.putFields(name, FieldDetailsProto.newBuilder()

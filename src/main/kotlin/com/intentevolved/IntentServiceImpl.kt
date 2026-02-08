@@ -72,7 +72,6 @@ class IntentServiceImpl private constructor(
         val rootIntentObj = IntentImpl(
             text = streamBuilder.header.rootIntent,
             id = 0,
-            parentId = null,
             stateProvider = this,
             isMeta = false
         )
@@ -104,14 +103,14 @@ class IntentServiceImpl private constructor(
 
     private fun createMetaIntentForOp(op: Op): Intent {
         val id = op.id
-        val parentId = getTargetIntentId(op)
+        val targetId = getTargetIntentId(op)
         val text = describeOp(op)
         val timestamp = if (op.hasTimestampEpochNanos()) op.timestampEpochNanos else null
 
         val metaIntent = IntentImpl(
             text = text,
             id = id,
-            parentId = parentId,
+            participantIds = if (targetId != null) mutableListOf(targetId) else mutableListOf(),
             stateProvider = this,
             createdTimestamp = timestamp,
             isMeta = true
@@ -146,14 +145,13 @@ class IntentServiceImpl private constructor(
         val intent = IntentImpl(
             text = create.text,
             id = id,
-            parentId = parentId,
+            participantIds = if (parentId != null) mutableListOf(parentId) else mutableListOf(),
             stateProvider = this,
             createdTimestamp = timestamp,
             isMeta = false
         )
         byId[id] = intent
         if (parentId != null) {
-            // link this child to its parent
             val childList = childrenById.getValue(parentId)
             childList.add(id)
             childrenById[parentId] = childList
@@ -166,7 +164,7 @@ class IntentServiceImpl private constructor(
         val updated = IntentImpl(
             text = update.newText,
             id = update.id,
-            parentId = existingImpl.parentId,
+            participantIds = existingImpl.participantIds.toMutableList(),
             stateProvider = this,
             createdTimestamp = existing.createdTimestamp(),
             lastUpdatedTimestamp = timestamp,
@@ -180,7 +178,7 @@ class IntentServiceImpl private constructor(
     private fun handleUpdateIntentParent(update: UpdateIntentParent, timestamp: Long?) {
         val existing = byId[update.id] ?: return
         val existingImpl = existing as IntentImpl
-        val oldParentId = existingImpl.parentId
+        val oldParentId = existingImpl.participantIds.firstOrNull()
 
         // Remove from old parent's children list
         if (oldParentId != null) {
@@ -193,11 +191,18 @@ class IntentServiceImpl private constructor(
         childList.add(update.id)
         childrenById[newParentId] = childList
 
-        // Update the intent with new parent
+        // Replace the first participant (primary parent)
+        val newParticipants = existingImpl.participantIds.toMutableList()
+        if (newParticipants.isNotEmpty()) {
+            newParticipants[0] = newParentId
+        } else {
+            newParticipants.add(newParentId)
+        }
+
         val updated = IntentImpl(
             text = existing.text(),
             id = update.id,
-            parentId = newParentId,
+            participantIds = newParticipants,
             createdTimestamp = existing.createdTimestamp(),
             lastUpdatedTimestamp = timestamp,
             stateProvider = this,
@@ -504,7 +509,7 @@ class IntentServiceImpl private constructor(
 class IntentImpl(
     private val text: String,
     private val id: Long,
-    internal val parentId: Long? = null,
+    internal val participantIds: MutableList<Long> = mutableListOf(),
     private val stateProvider: IntentStateProvider,
     private val createdTimestamp: Long? = null,
     private val lastUpdatedTimestamp: Long? = null,
@@ -514,7 +519,8 @@ class IntentImpl(
 ) : Intent {
     override fun text() = text
     override fun id() = id
-    override fun parent() = if (parentId == null) null else stateProvider.getById(parentId)
+    override fun parent() = participantIds.firstOrNull()?.let { stateProvider.getById(it) }
+    override fun participantIds(): List<Long> = participantIds.toList()
     override fun children(): List<Intent> = listOf()
     override fun createdTimestamp() = createdTimestamp
     override fun lastUpdatedTimestamp() = lastUpdatedTimestamp
@@ -528,5 +534,13 @@ class IntentImpl(
 
     internal fun setFieldValue(name: String, value: Any) {
         values[name] = value
+    }
+
+    internal fun addParticipant(participantId: Long, index: Int? = null) {
+        if (index != null && index in 0..participantIds.size) {
+            participantIds.add(index, participantId)
+        } else {
+            participantIds.add(participantId)
+        }
     }
 }

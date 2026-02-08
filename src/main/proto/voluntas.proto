@@ -116,7 +116,7 @@ message Stream {
 //   2: defines_field     - Adds a field to a type
 //   3: instantiates      - Creates an instance of a type
 //   4: sets_field        - Sets a field value on an entity
-//   5: binds_name        - Associates a name with an entity
+//   5: adds_participant  - Adds a participant to an entity
 //   6: depends_on        - Asserts dependency between entities
 //
 // Reserved Literal IDs for bootstrap names:

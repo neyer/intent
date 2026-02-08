@@ -156,6 +156,7 @@ message IntentProto {
   bool is_meta = 6;
   map<string, FieldDetailsProto> fields = 7;
   map<string, FieldValueProto> field_values = 8;
+  repeated int64 participant_ids = 9;
 }
 
 message FieldDetailsProto {

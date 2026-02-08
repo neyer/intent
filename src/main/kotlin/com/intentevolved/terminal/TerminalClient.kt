@@ -212,6 +212,8 @@ class IntentProtoWrapper(
 
     override fun parent(): Intent? = null  // Not needed for display
 
+    override fun participantIds(): List<Long> = proto.participantIdsList
+
     override fun children(): List<Intent> = emptyList()  // Not needed for display
 
     override fun fields(): Map<String, FieldDetails> {

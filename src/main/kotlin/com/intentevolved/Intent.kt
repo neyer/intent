@@ -18,7 +18,11 @@ interface Intent {
 
     fun lastUpdatedTimestamp(): Long?
 
+    /** Returns the first participant as the primary parent, or null if no participants. */
     fun parent(): Intent?
+
+    /** The ordered list of participant IDs for this intent. */
+    fun participantIds(): List<Long>
 
     fun children(): List<Intent>
 

@@ -26,7 +26,7 @@ class LiteralStore {
         registerBootstrap(2L, "defines_field")
         registerBootstrap(3L, "instantiates")
         registerBootstrap(4L, "sets_field")
-        registerBootstrap(5L, "binds_name")
+        registerBootstrap(5L, "adds_participant")
         registerBootstrap(6L, "depends_on")
         // Reserve some well-known field name literals
         registerBootstrap(7L, "text")

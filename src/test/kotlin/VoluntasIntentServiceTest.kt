@@ -39,11 +39,11 @@ class VoluntasIntentServiceTest {
     }
 
     @Test
-    fun `addIntent assigns sequential ids starting at 10`() {
+    fun `addIntent assigns sequential ids starting at FIRST_USER_ENTITY`() {
         val r1 = service.addIntent("First", 0)
         val r2 = service.addIntent("Second", 0)
-        assertEquals(10L, r1.id())
-        assertEquals(11L, r2.id())
+        assertEquals(VoluntasIds.FIRST_USER_ENTITY, r1.id())
+        assertEquals(VoluntasIds.FIRST_USER_ENTITY + 1, r2.id())
     }
 
     @Test
@@ -355,5 +355,136 @@ class VoluntasIntentServiceTest {
 
         // Verify root text also preserved
         assertEquals("Field value test", loaded.getById(0L)!!.text())
+    }
+
+    // --- addParticipant tests ---
+
+    @Test
+    fun `addParticipant appends participant to end by default`() {
+        val intent = service.addIntent("Target", parentId = 0)
+        val other1 = service.addIntent("Participant 1", parentId = 0)
+        val other2 = service.addIntent("Participant 2", parentId = 0)
+
+        // intent already has participantIds = [0] (root as parent)
+        service.addParticipant(intent.id(), other1.id())
+        service.addParticipant(intent.id(), other2.id())
+
+        val result = service.getById(intent.id())!!
+        val pids = result.participantIds()
+        assertEquals(3, pids.size)
+        assertEquals(0L, pids[0])           // original parent
+        assertEquals(other1.id(), pids[1])  // appended first
+        assertEquals(other2.id(), pids[2])  // appended second
+    }
+
+    @Test
+    fun `addParticipant inserts at specific index`() {
+        val intent = service.addIntent("Target", parentId = 0)
+        val other1 = service.addIntent("Participant 1", parentId = 0)
+        val other2 = service.addIntent("Participant 2", parentId = 0)
+
+        // intent starts with participantIds = [0]
+        service.addParticipant(intent.id(), other1.id())  // [0, other1]
+        service.addParticipant(intent.id(), other2.id(), index = 1) // [0, other2, other1]
+
+        val result = service.getById(intent.id())!!
+        val pids = result.participantIds()
+        assertEquals(3, pids.size)
+        assertEquals(0L, pids[0])
+        assertEquals(other2.id(), pids[1])  // inserted at index 1
+        assertEquals(other1.id(), pids[2])
+    }
+
+    @Test
+    fun `addParticipant at index 0 prepends`() {
+        val intent = service.addIntent("Target", parentId = 0)
+        val other = service.addIntent("New first participant", parentId = 0)
+
+        service.addParticipant(intent.id(), other.id(), index = 0)
+
+        val pids = service.getById(intent.id())!!.participantIds()
+        assertEquals(2, pids.size)
+        assertEquals(other.id(), pids[0])  // prepended
+        assertEquals(0L, pids[1])          // original parent shifted
+    }
+
+    @Test
+    fun `addParticipant throws for non-existent intent`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            service.addParticipant(999L, 0L)
+        }
+    }
+
+    @Test
+    fun `addParticipant persists across save and reload`(@TempDir tempDir: Path) {
+        val testFile = tempDir.resolve("test_participants.pb").toString()
+        val svc = VoluntasIntentService.new("Participant persistence")
+
+        val intent = svc.addIntent("Target", parentId = 0)
+        val p1 = svc.addIntent("P1", parentId = 0)
+        val p2 = svc.addIntent("P2", parentId = 0)
+
+        svc.addParticipant(intent.id(), p1.id())
+        svc.addParticipant(intent.id(), p2.id())
+
+        svc.writeToFile(testFile)
+        val loaded = VoluntasIntentService.fromFile(testFile)
+
+        val loadedIntent = loaded.getById(intent.id())!!
+        val pids = loadedIntent.participantIds()
+        assertEquals(3, pids.size)
+        assertEquals(0L, pids[0])
+        assertEquals(p1.id(), pids[1])
+        assertEquals(p2.id(), pids[2])
+
+        // Text should be preserved
+        assertEquals("Target", loadedIntent.text())
+    }
+
+    @Test
+    fun `addParticipant with index persists across save and reload`(@TempDir tempDir: Path) {
+        val testFile = tempDir.resolve("test_participants_idx.pb").toString()
+        val svc = VoluntasIntentService.new("Participant index persistence")
+
+        val intent = svc.addIntent("Target", parentId = 0)
+        val p1 = svc.addIntent("P1", parentId = 0)
+        val p2 = svc.addIntent("P2", parentId = 0)
+
+        svc.addParticipant(intent.id(), p1.id())
+        svc.addParticipant(intent.id(), p2.id(), index = 1) // insert before p1
+
+        svc.writeToFile(testFile)
+        val loaded = VoluntasIntentService.fromFile(testFile)
+
+        val pids = loaded.getById(intent.id())!!.participantIds()
+        assertEquals(3, pids.size)
+        assertEquals(0L, pids[0])
+        assertEquals(p2.id(), pids[1])  // inserted at index 1
+        assertEquals(p1.id(), pids[2])
+    }
+
+    @Test
+    fun `participantIds returns first participant as parent`() {
+        val parent = service.addIntent("Parent", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent.id())
+
+        val pids = service.getById(child.id())!!.participantIds()
+        assertEquals(1, pids.size)
+        assertEquals(parent.id(), pids[0])
+
+        // parent() should return the same as first participant
+        assertEquals(parent.id(), service.getById(child.id())!!.parent()!!.id())
+    }
+
+    @Test
+    fun `addParticipant updates childrenById for focal scope`() {
+        val intent = service.addIntent("Target", parentId = 0)
+        val other = service.addIntent("Other", parentId = 0)
+
+        service.addParticipant(intent.id(), other.id())
+
+        // intent should now appear as a child of other in focal scope
+        val scope = service.getFocalScope(other.id())
+        assertTrue(scope.children.map { it.id() }.contains(intent.id()))
     }
 }

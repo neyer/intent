@@ -13,7 +13,7 @@ object VoluntasIds {
     const val DEFINES_FIELD: Long = 2L
     const val INSTANTIATES: Long  = 3L
     const val SETS_FIELD: Long    = 4L
-    // 5 = binds_name (unused for now)
+    const val ADDS_PARTICIPANT: Long = 5L
     // 6 = depends_on (unused for now)
 
     /** The "string intent" type entity, auto-bootstrapped. */
