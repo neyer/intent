@@ -22,8 +22,11 @@ object VoluntasIds {
     /** The root intent always has entity ID 0. */
     const val ROOT_INTENT: Long = 0L
 
-    /** First user-allocatable entity ID (after bootstrap). */
-    const val FIRST_USER_ENTITY: Long = 10L
+    /** First user-allocatable entity ID (after bootstrap).
+     *  ID
+     *  s below this are reserved.
+     *  */
+    const val FIRST_USER_ENTITY: Long = 1000L
 
     // --- Literal bit ---
     const val LITERAL_BIT: Long = Long.MIN_VALUE // 0x8000000000000000
