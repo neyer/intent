@@ -1,3 +1,4 @@
+import com.intentevolved.FieldType
 import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.IntentService
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
@@ -329,5 +330,30 @@ class VoluntasIntentServiceTest {
             val intent = loaded.getById(ids[i])!!
             assertEquals("Intent ${i + 1}", intent.text())
         }
+    }
+
+    @Test
+    fun `setFieldValue preserves text and persists correctly`(@TempDir tempDir: Path) {
+        val testFile = tempDir.resolve("test_setfield.pb").toString()
+        val svc = VoluntasIntentService.new("Field value test")
+
+        val intent = svc.addIntent("Task to complete", parentId = 0)
+        svc.addField(intent.id(), "done", FieldType.FIELD_TYPE_BOOL)
+        svc.setFieldValue(intent.id(), "done", true)
+
+        // Verify text preserved in memory
+        assertEquals("Task to complete", svc.getById(intent.id())!!.text())
+        assertEquals(true, svc.getById(intent.id())!!.fieldValues()["done"])
+
+        // Verify text preserved after round-trip
+        svc.writeToFile(testFile)
+        val loaded = VoluntasIntentService.fromFile(testFile)
+
+        val loadedIntent = loaded.getById(intent.id())!!
+        assertEquals("Task to complete", loadedIntent.text())
+        assertEquals(true, loadedIntent.fieldValues()["done"])
+
+        // Verify root text also preserved
+        assertEquals("Field value test", loaded.getById(0L)!!.text())
     }
 }

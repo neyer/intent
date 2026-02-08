@@ -426,6 +426,22 @@ class VoluntasIntentService private constructor(
         emitRelationship(builder.build())
     }
 
+    fun setFieldValue(intentId: Long, fieldName: String, value: Any) {
+        byId[intentId] ?: throw IllegalArgumentException("No intent with id $intentId")
+
+        val relId = nextEntityId++
+        val fieldNameLit = literalStore.getOrCreate(fieldName)
+        val valueLit = literalStore.getOrCreate(value)
+
+        emitRelationship(Relationship.newBuilder()
+            .setId(relId)
+            .addParticipants(VoluntasIds.SETS_FIELD)
+            .addParticipants(intentId)
+            .addParticipants(fieldNameLit)
+            .addParticipants(valueLit)
+            .build())
+    }
+
     override fun getById(id: Long): Intent? = byId[id]
 
     override fun getFocalScope(id: Long): FocalScope {

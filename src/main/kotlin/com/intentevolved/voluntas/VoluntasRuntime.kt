@@ -97,8 +97,21 @@ class VoluntasIntentServiceGrpcImpl(
                     "added field '${af.fieldName}' to intent ${af.intentId}" to af.intentId
                 }
                 SubmitOpRequest.PayloadCase.SET_FIELD_VALUE -> {
-                    // SetFieldValue not directly supported on VoluntasIntentService yet
-                    throw IllegalArgumentException("SetFieldValue not supported via Voluntas backend")
+                    val sfv = request.setFieldValue
+                    val value: Any = when (sfv.valueCase) {
+                        SetFieldValue.ValueCase.STRING_VALUE -> sfv.stringValue
+                        SetFieldValue.ValueCase.INT32_VALUE -> sfv.int32Value
+                        SetFieldValue.ValueCase.INT64_VALUE -> sfv.int64Value
+                        SetFieldValue.ValueCase.FLOAT_VALUE -> sfv.floatValue
+                        SetFieldValue.ValueCase.DOUBLE_VALUE -> sfv.doubleValue
+                        SetFieldValue.ValueCase.BOOL_VALUE -> sfv.boolValue
+                        SetFieldValue.ValueCase.TIMESTAMP_VALUE -> sfv.timestampValue
+                        SetFieldValue.ValueCase.INTENT_REF_VALUE -> sfv.intentRefValue
+                        SetFieldValue.ValueCase.VALUE_NOT_SET, null ->
+                            throw IllegalArgumentException("SetFieldValue has no value set")
+                    }
+                    service.setFieldValue(sfv.intentId, sfv.fieldName, value)
+                    "set field '${sfv.fieldName}' on intent ${sfv.intentId}" to sfv.intentId
                 }
                 SubmitOpRequest.PayloadCase.PAYLOAD_NOT_SET ->
                     throw IllegalArgumentException("Request has no payload")

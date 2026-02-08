@@ -318,4 +318,66 @@ class VoluntasRuntimeTest {
         )
         assertEquals("After voluntas edit", getResponse.intent.text)
     }
+
+    @Test
+    fun `do command flow - addField then setFieldValue preserves text`() = runBlocking {
+        // Create an intent
+        val createResp = intentStub.submitOp(
+            SubmitOpRequest.newBuilder()
+                .setCreateIntent(CreateIntent.newBuilder()
+                    .setText("Intent to mark done")
+                    .setParentId(0L))
+                .build()
+        )
+        assertTrue(createResp.success)
+        val intentId = createResp.id
+
+        // Verify text is correct before do
+        val beforeGet = intentStub.getIntent(
+            GetIntentRequest.newBuilder().setId(intentId).build()
+        )
+        assertEquals("Intent to mark done", beforeGet.intent.text)
+
+        // Add 'done' field (like DoCommand does)
+        val addFieldResp = intentStub.submitOp(
+            SubmitOpRequest.newBuilder()
+                .setAddField(AddField.newBuilder()
+                    .setIntentId(intentId)
+                    .setFieldName("done")
+                    .setFieldType(FieldType.FIELD_TYPE_BOOL))
+                .build()
+        )
+        assertTrue(addFieldResp.success)
+
+        // Set 'done' field to true (like DoCommand does)
+        val setValueResp = intentStub.submitOp(
+            SubmitOpRequest.newBuilder()
+                .setSetFieldValue(SetFieldValue.newBuilder()
+                    .setIntentId(intentId)
+                    .setFieldName("done")
+                    .setBoolValue(true))
+                .build()
+        )
+        assertTrue(setValueResp.success)
+
+        // Verify text is still correct after do
+        val afterGet = intentStub.getIntent(
+            GetIntentRequest.newBuilder().setId(intentId).build()
+        )
+        assertEquals("Intent to mark done", afterGet.intent.text)
+        assertTrue(afterGet.intent.fieldValuesMap.containsKey("done"))
+        assertTrue(afterGet.intent.fieldValuesMap["done"]!!.boolValue)
+
+        // Verify focal scope still shows correct texts
+        val scope = intentStub.getFocalScope(
+            GetFocalScopeRequest.newBuilder().setId(intentId).build()
+        )
+        assertTrue(scope.found)
+        assertEquals("Intent to mark done", scope.focus.text)
+
+        // Root should still have its text in ancestry
+        val rootInAncestry = scope.ancestryList.find { it.id == 0L }
+        assertNotNull(rootInAncestry)
+        assertEquals("Runtime Test Root", rootInAncestry!!.text)
+    }
 }
