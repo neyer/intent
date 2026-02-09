@@ -1,6 +1,6 @@
 package com.intentevolved.com.intentevolved
 
-import com.intentevolved.FieldType
+import voluntas.v1.FieldType
 
 data class FieldDetails(
     val fieldType: FieldType,

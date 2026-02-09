@@ -1,7 +1,7 @@
 package com.intentevolved.worker
 
-import com.intentevolved.FieldType
-import com.intentevolved.IntentProto
+import voluntas.v1.FieldType
+import voluntas.v1.IntentProto
 
 /**
  * Intent 5: Implement timestamp tracking for intent start/finish.

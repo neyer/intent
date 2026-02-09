@@ -1,10 +1,10 @@
 package com.intentevolved
 
-import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 
 fun main(args: Array<String>) {
     val fileName = args.getOrNull(0) ?: "web_server_plan.pb"
-    val service = IntentServiceImpl.fromFile(fileName)
+    val service = VoluntasIntentService.fromFile(fileName)
 
     println("=== ${service.getById(0)?.text()} ===\n")
 

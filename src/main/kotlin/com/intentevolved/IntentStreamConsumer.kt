@@ -1,6 +1,6 @@
 package com.intentevolved.com.intentevolved
 
-import com.intentevolved.Op
+import voluntas.v1.SubmitOpRequest
 
 /**
  * Consumes intent stream operations.
@@ -19,6 +19,5 @@ interface IntentStreamConsumer {
      * Implementations may throw IllegalArgumentException for invalid ops
      * (e.g. unknown ids). Callers can translate those into user messages.
      */
-    fun consume(op: Op): CommandResult
+    fun consume(request: SubmitOpRequest): CommandResult
 }
-

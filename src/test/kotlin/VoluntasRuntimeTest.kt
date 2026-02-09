@@ -1,4 +1,3 @@
-import com.intentevolved.*
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentServiceGrpcImpl
 import com.intentevolved.com.intentevolved.voluntas.VoluntasServiceGrpcImpl

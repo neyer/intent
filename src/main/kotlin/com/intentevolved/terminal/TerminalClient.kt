@@ -6,7 +6,7 @@ import com.googlecode.lanterna.screen.Screen
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory
 import com.googlecode.lanterna.TerminalPosition
 import com.googlecode.lanterna.TerminalSize
-import com.intentevolved.*
+import voluntas.v1.*
 import com.intentevolved.com.intentevolved.CommandResult
 import com.intentevolved.com.intentevolved.FieldDetails
 import com.intentevolved.com.intentevolved.FocalScope
@@ -141,8 +141,7 @@ class IntentGrpcClient(
 
     private val stub = IntentServiceGrpc.newBlockingStub(channel)
 
-    override fun consume(op: Op): CommandResult {
-        val request = opToSubmitRequest(op)
+    override fun consume(request: SubmitOpRequest): CommandResult {
         val response = stub.submitOp(request)
 
         return if (response.success) {
@@ -176,20 +175,6 @@ class IntentGrpcClient(
             ancestry = response.ancestryList.map { IntentProtoWrapper(it) },
             children = response.childrenList.map { IntentProtoWrapper(it) }
         )
-    }
-
-    private fun opToSubmitRequest(op: Op): SubmitOpRequest {
-        val builder = SubmitOpRequest.newBuilder()
-
-        when {
-            op.hasCreateIntent() -> builder.setCreateIntent(op.createIntent)
-            op.hasUpdateIntent() -> builder.setUpdateIntent(op.updateIntent)
-            op.hasUpdateIntentParent() -> builder.setUpdateIntentParent(op.updateIntentParent)
-            op.hasAddField() -> builder.setAddField(op.addField)
-            op.hasSetFieldValue() -> builder.setSetFieldValue(op.setFieldValue)
-        }
-
-        return builder.build()
     }
 }
 

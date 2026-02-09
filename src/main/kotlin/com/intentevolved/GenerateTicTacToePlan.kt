@@ -1,12 +1,12 @@
 package com.intentevolved
 
-import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 
 /**
  * Generates a plan to build an HTML+JavaScript Tic Tac Toe game.
  */
 fun main() {
-    val service = IntentServiceImpl.new("Build an HTML+JavaScript Tic Tac Toe game")
+    val service = VoluntasIntentService.new("Build an HTML+JavaScript Tic Tac Toe game")
 
     // Level 1: Major components
     val html = service.addIntent("Create the HTML structure for the game", parentId = 0)

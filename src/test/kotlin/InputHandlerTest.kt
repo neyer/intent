@@ -1,7 +1,8 @@
 package com.intentevolved
 
 
-import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
 import com.intentevolved.com.intentevolved.terminal.InputHandler
 
 import com.googlecode.lanterna.input.KeyStroke
@@ -18,7 +19,7 @@ class InputHandlerTest {
 
     @Test
     fun `Character appends to inputBuffer`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
 
         h.handleKeyStroke(ch('a'))
@@ -30,7 +31,7 @@ class InputHandlerTest {
 
     @Test
     fun `Backspace removes last char when buffer non-empty`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
 
         h.handleKeyStroke(ch('a'))
@@ -42,7 +43,7 @@ class InputHandlerTest {
 
     @Test
     fun `Backspace on empty buffer does nothing`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
 
         h.handleKeyStroke(backspace())
@@ -52,7 +53,7 @@ class InputHandlerTest {
 
     @Test
     fun `Enter on exit command sets keepGoing false and clears buffer`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
 
         "exit".forEach { h.handleKeyStroke(ch(it)) }
@@ -65,64 +66,68 @@ class InputHandlerTest {
 
     @Test
     fun `Enter on add command calls service and sets commandResult`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
+        val id1 = VoluntasIds.FIRST_USER_ENTITY
 
         "add buy milk".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
 
         assertTrue(h.keepGoing)
         assertEquals("", h.inputBuffer.toString())
-        assertEquals("buy milk", service.getById(1)!!.text())
-        assertEquals("added intent 1", h.commandResult)
+        assertEquals("buy milk", service.getById(id1)!!.text())
+        assertEquals("added intent $id1", h.commandResult)
     }
 
     @Test
     fun `Enter on update command calls edit and sets commandResult`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
+        val id1 = VoluntasIds.FIRST_USER_ENTITY
 
         "add buy milk".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
 
         assertTrue(h.keepGoing)
         assertEquals("", h.inputBuffer.toString())
-        assertEquals("added intent 1", h.commandResult)
+        assertEquals("added intent $id1", h.commandResult)
 
-        "update 1 buy eggs".forEach { h.handleKeyStroke(ch(it)) }
+        "update $id1 buy eggs".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
-        assertEquals("buy eggs", service.getById(1)!!.text())
-        assertEquals("updated intent 1", h.commandResult)
+        assertEquals("buy eggs", service.getById(id1)!!.text())
+        assertEquals("updated intent $id1", h.commandResult)
     }
 
     @Test
     fun `Enter on move command moves intent to new parent`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
+        val id1 = VoluntasIds.FIRST_USER_ENTITY
+        val id2 = VoluntasIds.FIRST_USER_ENTITY + 1
 
         // Create parent intent
         "add parent intent".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
-        assertEquals("added intent 1", h.commandResult)
+        assertEquals("added intent $id1", h.commandResult)
 
         // Create child intent
         "add child intent".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
-        assertEquals("added intent 2", h.commandResult)
+        assertEquals("added intent $id2", h.commandResult)
 
-        // Move child from root (0) to parent (1)
-        "move 2 1".forEach { h.handleKeyStroke(ch(it)) }
+        // Move child from root (0) to parent (id1)
+        "move $id2 $id1".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
-        assertEquals("moved intent 2 to parent 1", h.commandResult)
-        
+        assertEquals("moved intent $id2 to parent $id1", h.commandResult)
+
         // Verify the move worked
-        val child = service.getById(2)!!
-        assertEquals(1L, child.parent()!!.id())
+        val child = service.getById(id2)!!
+        assertEquals(id1, child.parent()!!.id())
     }
 
     @Test
     fun `Move command with invalid intent id returns error`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
 
         "move 999 0".forEach { h.handleKeyStroke(ch(it)) }
@@ -134,24 +139,25 @@ class InputHandlerTest {
 
     @Test
     fun `Move command with invalid parent id returns error`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
+        val id1 = VoluntasIds.FIRST_USER_ENTITY
 
         // Create an intent
         "add test intent".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
 
         // Try to move to invalid parent
-        "move 1 999".forEach { h.handleKeyStroke(ch(it)) }
+        "move $id1 999".forEach { h.handleKeyStroke(ch(it)) }
         h.handleKeyStroke(enter())
-        
+
         assertTrue(h.commandResult.contains("Error"))
         assertTrue(h.commandResult.contains("No intent with id"))
     }
 
     @Test
     fun `Move command with wrong number of arguments returns error`() {
-        val service = IntentServiceImpl.new("testing")
+        val service = VoluntasIntentService.new("testing")
         val h = InputHandler(service,service)
 
         "move 1".forEach { h.handleKeyStroke(ch(it)) }

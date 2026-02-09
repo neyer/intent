@@ -1,6 +1,6 @@
 package com.intentevolved.worker
 
-import com.intentevolved.IntentProto
+import voluntas.v1.IntentProto
 
 /**
  * Intent 4: Implement intent and sub-intent fetching logic.

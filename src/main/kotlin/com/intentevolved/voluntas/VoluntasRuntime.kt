@@ -1,6 +1,5 @@
 package com.intentevolved.com.intentevolved.voluntas
 
-import com.intentevolved.*
 import com.intentevolved.com.intentevolved.FocalScope
 import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.IntentService
@@ -62,8 +61,7 @@ class VoluntasRuntime(
 /**
  * gRPC impl for the IntentService endpoints, backed by VoluntasIntentService.
  *
- * Translates intent.proto SubmitOp requests to IntentService method calls
- * rather than going through IntentStreamConsumer.consume(op).
+ * Delegates to service.consume(SubmitOpRequest) for all mutations.
  */
 class VoluntasIntentServiceGrpcImpl(
     private val service: VoluntasIntentService,
@@ -72,56 +70,15 @@ class VoluntasIntentServiceGrpcImpl(
 
     override suspend fun submitOp(request: SubmitOpRequest): SubmitOpResponse {
         return try {
-            val (message, id) = when (request.payloadCase) {
-                SubmitOpRequest.PayloadCase.CREATE_INTENT -> {
-                    val create = request.createIntent
-                    val parentId = if (create.hasParentId()) create.parentId else 0L
-                    val intent = service.addIntent(create.text, parentId)
-                    "added intent ${intent.id()}" to intent.id()
-                }
-                SubmitOpRequest.PayloadCase.UPDATE_INTENT -> {
-                    val update = request.updateIntent
-                    service.edit(update.id, update.newText)
-                    "updated intent ${update.id}" to update.id
-                }
-                SubmitOpRequest.PayloadCase.UPDATE_INTENT_PARENT -> {
-                    val move = request.updateIntentParent
-                    service.moveParent(move.id, move.parentId)
-                    "moved intent ${move.id} to parent ${move.parentId}" to move.id
-                }
-                SubmitOpRequest.PayloadCase.ADD_FIELD -> {
-                    val af = request.addField
-                    val required = if (af.hasRequired()) af.required else false
-                    val description = if (af.hasDescription()) af.description else null
-                    service.addField(af.intentId, af.fieldName, af.fieldType, required, description)
-                    "added field '${af.fieldName}' to intent ${af.intentId}" to af.intentId
-                }
-                SubmitOpRequest.PayloadCase.SET_FIELD_VALUE -> {
-                    val sfv = request.setFieldValue
-                    val value: Any = when (sfv.valueCase) {
-                        SetFieldValue.ValueCase.STRING_VALUE -> sfv.stringValue
-                        SetFieldValue.ValueCase.INT32_VALUE -> sfv.int32Value
-                        SetFieldValue.ValueCase.INT64_VALUE -> sfv.int64Value
-                        SetFieldValue.ValueCase.FLOAT_VALUE -> sfv.floatValue
-                        SetFieldValue.ValueCase.DOUBLE_VALUE -> sfv.doubleValue
-                        SetFieldValue.ValueCase.BOOL_VALUE -> sfv.boolValue
-                        SetFieldValue.ValueCase.TIMESTAMP_VALUE -> sfv.timestampValue
-                        SetFieldValue.ValueCase.INTENT_REF_VALUE -> sfv.intentRefValue
-                        SetFieldValue.ValueCase.VALUE_NOT_SET, null ->
-                            throw IllegalArgumentException("SetFieldValue has no value set")
-                    }
-                    service.setFieldValue(sfv.intentId, sfv.fieldName, value)
-                    "set field '${sfv.fieldName}' on intent ${sfv.intentId}" to sfv.intentId
-                }
-                SubmitOpRequest.PayloadCase.PAYLOAD_NOT_SET ->
-                    throw IllegalArgumentException("Request has no payload")
-            }
-
+            val result = service.consume(request)
             service.writeToFile(fileName)
+
+            // Extract the id from the result message (format: "added intent X" or similar)
+            val id = extractIdFromResult(result.message)
 
             SubmitOpResponse.newBuilder()
                 .setSuccess(true)
-                .setMessage(message)
+                .setMessage(result.message)
                 .setId(id)
                 .build()
         } catch (e: IllegalArgumentException) {
@@ -131,6 +88,12 @@ class VoluntasIntentServiceGrpcImpl(
                 .setId(0)
                 .build()
         }
+    }
+
+    private fun extractIdFromResult(message: String): Long {
+        val regex = Regex("intent (\\d+)")
+        val match = regex.find(message)
+        return match?.groupValues?.get(1)?.toLongOrNull() ?: 0L
     }
 
     override suspend fun getIntent(request: GetIntentRequest): GetIntentResponse {
@@ -211,7 +174,6 @@ class VoluntasServiceGrpcImpl(
 
 /**
  * Convert an Intent to its proto representation.
- * Duplicated from IntentServer to avoid coupling the two servers.
  */
 fun intentToProto(intent: Intent): IntentProto {
     val builder = IntentProto.newBuilder()

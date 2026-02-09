@@ -1,11 +1,13 @@
 package com.intentevolved.com.intentevolved.voluntas
 
 import com.intentevolved.com.intentevolved.*
-import com.intentevolved.FieldType
+import voluntas.v1.FieldType
 import voluntas.v1.Literal
 import voluntas.v1.Op
 import voluntas.v1.Relationship
 import voluntas.v1.Stream
+import voluntas.v1.SetFieldValue
+import voluntas.v1.SubmitOpRequest
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -21,7 +23,7 @@ import java.time.Instant
 class VoluntasIntentService private constructor(
 // Some relationship between existing intents.
     private val streamId: String
-) : IntentService, IntentStateProvider, VoluntasStreamConsumer {
+) : IntentService, IntentStateProvider, IntentStreamConsumer, VoluntasStreamConsumer {
 
     companion object {
         private fun currentEpochNanos(): Long {
@@ -546,6 +548,55 @@ class VoluntasIntentService private constructor(
         val file = File(fileName)
         FileOutputStream(file).use { output ->
             streamBuilder.build().writeTo(output)
+        }
+    }
+
+    // --- IntentStreamConsumer implementation ---
+
+    override fun consume(request: SubmitOpRequest): CommandResult {
+        return when (request.payloadCase) {
+            SubmitOpRequest.PayloadCase.CREATE_INTENT -> {
+                val create = request.createIntent
+                val parentId = if (create.hasParentId()) create.parentId else 0L
+                val intent = addIntent(create.text, parentId)
+                CommandResult("added intent ${intent.id()}")
+            }
+            SubmitOpRequest.PayloadCase.UPDATE_INTENT -> {
+                val update = request.updateIntent
+                edit(update.id, update.newText)
+                CommandResult("updated intent ${update.id}")
+            }
+            SubmitOpRequest.PayloadCase.UPDATE_INTENT_PARENT -> {
+                val move = request.updateIntentParent
+                moveParent(move.id, move.parentId)
+                CommandResult("moved intent ${move.id} to parent ${move.parentId}")
+            }
+            SubmitOpRequest.PayloadCase.ADD_FIELD -> {
+                val af = request.addField
+                val required = if (af.hasRequired()) af.required else false
+                val description = if (af.hasDescription()) af.description else null
+                addField(af.intentId, af.fieldName, af.fieldType, required, description)
+                CommandResult("added field '${af.fieldName}' to intent ${af.intentId}")
+            }
+            SubmitOpRequest.PayloadCase.SET_FIELD_VALUE -> {
+                val sfv = request.setFieldValue
+                val value: Any = when (sfv.valueCase) {
+                    SetFieldValue.ValueCase.STRING_VALUE -> sfv.stringValue
+                    SetFieldValue.ValueCase.INT32_VALUE -> sfv.int32Value
+                    SetFieldValue.ValueCase.INT64_VALUE -> sfv.int64Value
+                    SetFieldValue.ValueCase.FLOAT_VALUE -> sfv.floatValue
+                    SetFieldValue.ValueCase.DOUBLE_VALUE -> sfv.doubleValue
+                    SetFieldValue.ValueCase.BOOL_VALUE -> sfv.boolValue
+                    SetFieldValue.ValueCase.TIMESTAMP_VALUE -> sfv.timestampValue
+                    SetFieldValue.ValueCase.INTENT_REF_VALUE -> sfv.intentRefValue
+                    SetFieldValue.ValueCase.VALUE_NOT_SET, null ->
+                        throw IllegalArgumentException("SetFieldValue has no value set")
+                }
+                setFieldValue(sfv.intentId, sfv.fieldName, value)
+                CommandResult("set field '${sfv.fieldName}' on intent ${sfv.intentId}")
+            }
+            SubmitOpRequest.PayloadCase.PAYLOAD_NOT_SET ->
+                throw IllegalArgumentException("Request has no payload")
         }
     }
 

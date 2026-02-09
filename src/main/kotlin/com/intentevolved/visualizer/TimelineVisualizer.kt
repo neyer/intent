@@ -1,6 +1,6 @@
 package com.intentevolved.visualizer
 
-import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 import java.io.File
 
 /**
@@ -118,7 +118,7 @@ fun printUsage() {
 }
 
 fun readAndExtractTimeline(filename: String): List<TimelineEntry> {
-    val service = IntentServiceImpl.fromFile(filename)
+    val service = VoluntasIntentService.fromFile(filename)
 
     val entries = mutableListOf<TimelineEntry>()
 

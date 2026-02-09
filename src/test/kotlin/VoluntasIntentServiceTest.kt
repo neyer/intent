@@ -1,4 +1,4 @@
-import com.intentevolved.FieldType
+import voluntas.v1.FieldType
 import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.IntentService
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService

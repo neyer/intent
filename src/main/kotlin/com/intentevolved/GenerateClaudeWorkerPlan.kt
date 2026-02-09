@@ -1,12 +1,12 @@
 package com.intentevolved
 
-import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 
 /**
  * Generates the Claude worker implementation plan as an intent stream file.
  */
 fun main() {
-    val service = IntentServiceImpl.new("Build a Claude worker that executes intents using the Claude API")
+    val service = VoluntasIntentService.new("Build a Claude worker that executes intents using the Claude API")
 
     // Level 1: Major components
     val cliArgs = service.addIntent("Parse command-line arguments for server address and intent ID", parentId = 0)

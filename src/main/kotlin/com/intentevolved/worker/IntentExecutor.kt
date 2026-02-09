@@ -1,6 +1,6 @@
 package com.intentevolved.worker
 
-import com.intentevolved.IntentProto
+import voluntas.v1.IntentProto
 
 /**
  * Intent 6: Implement intent execution logic using Claude API.

@@ -1,12 +1,12 @@
 package com.intentevolved
 
-import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 
 /**
  * Generates the timeline visualizer implementation plan as an intent stream file.
  */
 fun main() {
-    val service = IntentServiceImpl.new("Build a timeline visualizer that reads intent protocol files and generates an HTML/JS visualization")
+    val service = VoluntasIntentService.new("Build a timeline visualizer that reads intent protocol files and generates an HTML/JS visualization")
 
     // Level 1: Major components
     val cliArgs = service.addIntent("Parse command-line arguments for input file and output file", parentId = 0)

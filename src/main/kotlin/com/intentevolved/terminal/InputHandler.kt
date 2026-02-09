@@ -2,13 +2,13 @@ package com.intentevolved.com.intentevolved.terminal
 
 import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
-import com.intentevolved.AddField
-import com.intentevolved.FieldType
-import com.intentevolved.Op
-import com.intentevolved.CreateIntent
-import com.intentevolved.SetFieldValue
-import com.intentevolved.UpdateIntentText
-import com.intentevolved.UpdateIntentParent
+import voluntas.v1.AddField
+import voluntas.v1.FieldType
+import voluntas.v1.SubmitOpRequest
+import voluntas.v1.CreateIntent
+import voluntas.v1.SetFieldValue
+import voluntas.v1.UpdateIntentText
+import voluntas.v1.UpdateIntentParent
 import com.intentevolved.com.intentevolved.CommandResult
 import com.intentevolved.com.intentevolved.IntentStreamConsumer
 import com.intentevolved.com.intentevolved.IntentStateProvider
@@ -102,17 +102,15 @@ class AddCommand : Command("add") {
     ): CommandResult {
         val intentText = args.ifEmpty { "new intent at ${System.currentTimeMillis()}" }
 
-        // Let the consumer (IntentServiceImpl) assign ids and timestamps.
-        val create = CreateIntent.newBuilder()
-            .setText(intentText)
-            .setParentId(focalIntent)
+        val request = SubmitOpRequest.newBuilder()
+            .setCreateIntent(
+                CreateIntent.newBuilder()
+                    .setText(intentText)
+                    .setParentId(focalIntent)
+            )
             .build()
 
-        val op = Op.newBuilder()
-            .setCreateIntent(create)
-            .build()
-
-        return consumer.consume(op)
+        return consumer.consume(request)
     }
 }
 
@@ -164,17 +162,16 @@ class UpdateCommand : Command("update") {
         return if (id == null) {
             CommandResult("Invalid intent id: ${parts[0]}")
         } else {
-            val update = UpdateIntentText.newBuilder()
-                .setId(id)
-                .setNewText(parts[1])
-                .build()
-
-            val op = Op.newBuilder()
-                .setUpdateIntent(update)
+            val request = SubmitOpRequest.newBuilder()
+                .setUpdateIntent(
+                    UpdateIntentText.newBuilder()
+                        .setId(id)
+                        .setNewText(parts[1])
+                )
                 .build()
 
             try {
-                consumer.consume(op)
+                consumer.consume(request)
             } catch (e: IllegalArgumentException) {
                 return CommandResult("Error: ${e.message}")
             }
@@ -197,17 +194,16 @@ class MoveCommand : Command("move") {
             intentId == null -> CommandResult("Invalid intent id: ${parts[0]}")
             newParentId == null -> CommandResult("Invalid parent id: ${parts[1]}")
             else -> {
-                val updateParent = UpdateIntentParent.newBuilder()
-                    .setId(intentId)
-                    .setParentId(newParentId)
-                    .build()
-
-                val op = Op.newBuilder()
-                    .setUpdateIntentParent(updateParent)
+                val request = SubmitOpRequest.newBuilder()
+                    .setUpdateIntentParent(
+                        UpdateIntentParent.newBuilder()
+                            .setId(intentId)
+                            .setParentId(newParentId)
+                    )
                     .build()
 
                 try {
-                    consumer.consume(op)
+                    consumer.consume(request)
                 } catch (e: IllegalArgumentException) {
                     CommandResult("Error: ${e.message}")
                 }
@@ -227,7 +223,7 @@ class DoCommand : Command("do") {
         try {
             // Add the 'done' field if it doesn't already exist
             if (!intent.fields().containsKey("done")) {
-                val addFieldOp = Op.newBuilder()
+                val addFieldRequest = SubmitOpRequest.newBuilder()
                     .setAddField(
                         AddField.newBuilder()
                             .setIntentId(intentId)
@@ -235,11 +231,11 @@ class DoCommand : Command("do") {
                             .setFieldType(FieldType.FIELD_TYPE_BOOL)
                     )
                     .build()
-                consumer.consume(addFieldOp)
+                consumer.consume(addFieldRequest)
             }
 
             // Set the 'done' field to true
-            val setValueOp = Op.newBuilder()
+            val setValueRequest = SubmitOpRequest.newBuilder()
                 .setSetFieldValue(
                     SetFieldValue.newBuilder()
                         .setIntentId(intentId)
@@ -247,7 +243,7 @@ class DoCommand : Command("do") {
                         .setBoolValue(true)
                 )
                 .build()
-            consumer.consume(setValueOp)
+            consumer.consume(setValueRequest)
 
             return CommandResult("Marked intent $intentId as done")
         } catch (e: IllegalArgumentException) {

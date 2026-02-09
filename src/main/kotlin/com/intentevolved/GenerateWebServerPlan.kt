@@ -1,12 +1,12 @@
 package com.intentevolved
 
-import com.intentevolved.com.intentevolved.IntentServiceImpl
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 
 /**
  * Generates the web server implementation plan as an intent stream file.
  */
 fun main() {
-    val service = IntentServiceImpl.new("Add a web interface to the Intent Server")
+    val service = VoluntasIntentService.new("Add a web interface to the Intent Server")
 
     // Level 1: Major components
     val webServer = service.addIntent("Set up web server infrastructure using Ktor", parentId = 0)

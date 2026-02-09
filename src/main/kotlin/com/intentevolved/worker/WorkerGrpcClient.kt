@@ -1,6 +1,6 @@
 package com.intentevolved.worker
 
-import com.intentevolved.*
+import voluntas.v1.*
 import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import io.grpc.StatusException
