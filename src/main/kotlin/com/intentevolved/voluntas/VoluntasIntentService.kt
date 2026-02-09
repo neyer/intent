@@ -559,7 +559,7 @@ class VoluntasIntentService private constructor(
                 val create = request.createIntent
                 val parentId = if (create.hasParentId()) create.parentId else 0L
                 val intent = addIntent(create.text, parentId)
-                CommandResult("added intent ${intent.id()}")
+                CommandResult("added intent ${intent.id()}", id = intent.id())
             }
             SubmitOpRequest.PayloadCase.UPDATE_INTENT -> {
                 val update = request.updateIntent

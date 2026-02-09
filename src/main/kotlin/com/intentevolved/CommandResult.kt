@@ -7,6 +7,7 @@ package com.intentevolved.com.intentevolved
  */
 data class CommandResult(
     val message: String,
-    val newFocalIntent: Long? = null // null means no change
+    val newFocalIntent: Long? = null, // null means no change
+    val id: Long? = null // server-assigned entity ID, when applicable
 )
 

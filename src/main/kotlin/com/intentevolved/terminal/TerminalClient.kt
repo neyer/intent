@@ -145,7 +145,7 @@ class IntentGrpcClient(
         val response = stub.submitOp(request)
 
         return if (response.success) {
-            CommandResult(response.message)
+            CommandResult(response.message, id = response.id)
         } else {
             throw IllegalArgumentException(response.message)
         }

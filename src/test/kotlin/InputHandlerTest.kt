@@ -4,6 +4,7 @@ package com.intentevolved
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
 import com.intentevolved.com.intentevolved.terminal.InputHandler
+import java.io.File
 
 import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
@@ -169,5 +170,49 @@ class InputHandlerTest {
         h.handleKeyStroke(enter())
         
         assertEquals("Move command requires two intent ids: the intent to move and the new parent id", h.commandResult)
+    }
+
+    @Test
+    fun `Import command recreates intent tree from pb file`() {
+        // Build a source intent tree and save to a temp file
+        val source = VoluntasIntentService.new("imported root")
+        val child1 = source.addIntent("child one", 0L)
+        val child2 = source.addIntent("child two", 0L)
+        val grandchild = source.addIntent("grandchild", child1.id())
+
+        val tempFile = File.createTempFile("import-test", ".pb")
+        tempFile.deleteOnExit()
+        source.writeToFile(tempFile.absolutePath)
+
+        // Set up a destination service and import via command
+        val dest = VoluntasIntentService.new("destination root")
+        val h = InputHandler(dest, dest)
+
+        "import ${tempFile.absolutePath}".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+
+        assertTrue(h.commandResult.startsWith("Imported "))
+        assertTrue(h.commandResult.contains("4 intents"))
+
+        // The imported root should be a child of the destination root (id=0)
+        val destRoot = dest.getFocalScope(0L)
+        val importedRoots = destRoot.children.filter { it.text() == "imported root" }
+        assertEquals(1, importedRoots.size)
+
+        // Check the imported root has 2 children
+        val importedRootScope = dest.getFocalScope(importedRoots[0].id())
+        val importedChildren = importedRootScope.children.filter { !it.isMeta() }
+        assertEquals(2, importedChildren.size)
+
+        val childOneImported = importedChildren.find { it.text() == "child one" }!!
+        val childTwoImported = importedChildren.find { it.text() == "child two" }!!
+        assertNotNull(childOneImported)
+        assertNotNull(childTwoImported)
+
+        // Check grandchild is under child one
+        val childOneScope = dest.getFocalScope(childOneImported.id())
+        val grandchildren = childOneScope.children.filter { !it.isMeta() }
+        assertEquals(1, grandchildren.size)
+        assertEquals("grandchild", grandchildren[0].text())
     }
 }

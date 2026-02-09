@@ -12,6 +12,8 @@ import voluntas.v1.UpdateIntentParent
 import com.intentevolved.com.intentevolved.CommandResult
 import com.intentevolved.com.intentevolved.IntentStreamConsumer
 import com.intentevolved.com.intentevolved.IntentStateProvider
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
+import java.io.File
 
 enum class RedrawType {
     FULL_SCREEN,
@@ -252,6 +254,98 @@ class DoCommand : Command("do") {
     }
 }
 
+class ImportCommand : Command("import") {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
+        val filePath = args.trim()
+        if (filePath.isEmpty()) {
+            return CommandResult("import requires a file path")
+        }
+
+        val file = File(filePath)
+        if (!file.exists()) {
+            return CommandResult("File not found: $filePath")
+        }
+
+        val sourceService = VoluntasIntentService.fromFile(filePath)
+        val oldToNew = mutableMapOf<Long, Long>()
+        var importedCount = 0
+
+        fun importIntent(oldId: Long, newParentId: Long) {
+            val intent = sourceService.getById(oldId) ?: return
+
+            // Create the intent on the target
+            val createRequest = SubmitOpRequest.newBuilder()
+                .setCreateIntent(
+                    CreateIntent.newBuilder()
+                        .setText(intent.text())
+                        .setParentId(newParentId)
+                )
+                .build()
+            val createResult = consumer.consume(createRequest)
+            val newId = createResult.id ?: return
+            oldToNew[oldId] = newId
+            importedCount++
+
+            // Recreate field definitions
+            for ((fieldName, details) in intent.fields()) {
+                val addFieldBuilder = AddField.newBuilder()
+                    .setIntentId(newId)
+                    .setFieldName(fieldName)
+                    .setFieldType(details.fieldType)
+                    .setRequired(details.required)
+                if (details.description != null) {
+                    addFieldBuilder.setDescription(details.description)
+                }
+                val addFieldRequest = SubmitOpRequest.newBuilder()
+                    .setAddField(addFieldBuilder)
+                    .build()
+                consumer.consume(addFieldRequest)
+            }
+
+            // Recreate field values
+            for ((fieldName, value) in intent.fieldValues()) {
+                val sfvBuilder = SetFieldValue.newBuilder()
+                    .setIntentId(newId)
+                    .setFieldName(fieldName)
+                when (value) {
+                    is String -> sfvBuilder.setStringValue(value)
+                    is Int -> sfvBuilder.setInt32Value(value)
+                    is Long -> sfvBuilder.setInt64Value(value)
+                    is Float -> sfvBuilder.setFloatValue(value)
+                    is Double -> sfvBuilder.setDoubleValue(value)
+                    is Boolean -> sfvBuilder.setBoolValue(value)
+                }
+                val setValueRequest = SubmitOpRequest.newBuilder()
+                    .setSetFieldValue(sfvBuilder)
+                    .build()
+                consumer.consume(setValueRequest)
+            }
+
+            // Recurse into children
+            val scope = sourceService.getFocalScope(oldId)
+            for (child in scope.children) {
+                if (!child.isMeta()) {
+                    importIntent(child.id(), newId)
+                }
+            }
+        }
+
+        // Start from the root (id=0) of the source file
+        val rootScope = sourceService.getFocalScope(0L)
+        val rootIntent = rootScope.focus
+
+        // Import the root intent as a child of the current focalIntent
+        importIntent(rootIntent.id(), focalIntent)
+
+        return CommandResult("Imported $importedCount intents from $filePath")
+    }
+}
+
 // Command registry and executor
 class CommandExecutor(
     private val consumer: IntentStreamConsumer,
@@ -262,7 +356,8 @@ class CommandExecutor(
         UpdateCommand(),
         UpCommand(),
         MoveCommand(),
-        DoCommand()
+        DoCommand(),
+        ImportCommand()
     )
 
     fun execute(command: String, currentFocalIntent: Long): Pair<String, Long> {
