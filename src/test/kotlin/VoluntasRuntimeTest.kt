@@ -5,6 +5,10 @@ import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
 import io.grpc.ManagedChannelBuilder
 import io.grpc.ServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
+import kotlinx.coroutines.CloseableCoroutineDispatcher
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
@@ -13,6 +17,7 @@ import voluntas.v1.*
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
+@OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
 class VoluntasRuntimeTest {
 
     companion object {
@@ -21,6 +26,7 @@ class VoluntasRuntimeTest {
         private lateinit var channel: io.grpc.ManagedChannel
         private lateinit var intentStub: IntentServiceGrpcKt.IntentServiceCoroutineStub
         private lateinit var voluntasStub: VoluntasServiceGrpcKt.VoluntasServiceCoroutineStub
+        private lateinit var stateDispatcher: CloseableCoroutineDispatcher
         private var port: Int = 0
 
         @TempDir
@@ -32,11 +38,12 @@ class VoluntasRuntimeTest {
         fun startServer() {
             val fileName = tempDir.resolve("test_runtime.pb").toString()
             service = VoluntasIntentService.new("Runtime Test Root")
+            stateDispatcher = newSingleThreadContext("test-intent-state")
 
             server = ServerBuilder
                 .forPort(0) // random free port
-                .addService(VoluntasIntentServiceGrpcImpl(service, fileName))
-                .addService(VoluntasServiceGrpcImpl(service, fileName))
+                .addService(VoluntasIntentServiceGrpcImpl(service, fileName, stateDispatcher))
+                .addService(VoluntasServiceGrpcImpl(service, fileName, stateDispatcher))
                 .addService(ProtoReflectionService.newInstance())
                 .build()
                 .start()
@@ -57,6 +64,7 @@ class VoluntasRuntimeTest {
         fun stopServer() {
             channel.shutdown().awaitTermination(5, TimeUnit.SECONDS)
             server.shutdown().awaitTermination(5, TimeUnit.SECONDS)
+            stateDispatcher.close()
         }
     }
 

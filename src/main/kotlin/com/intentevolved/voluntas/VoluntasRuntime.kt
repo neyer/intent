@@ -7,18 +7,27 @@ import com.intentevolved.com.intentevolved.server.IntentWebServer
 import io.grpc.Server
 import io.grpc.ServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
+import kotlinx.coroutines.CloseableCoroutineDispatcher
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.newSingleThreadContext
+import kotlinx.coroutines.withContext
 import voluntas.v1.*
 
+@OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
 class VoluntasRuntime(
     private val port: Int,
     private val service: VoluntasIntentService,
     private val fileName: String,
     private val webPort: Int? = null
 ) {
+    // this enforces that there's exactly one thread messing with the service
+    private val stateDispatcher: CloseableCoroutineDispatcher = newSingleThreadContext("intent-state")
+
     private val server: Server = ServerBuilder
         .forPort(port)
-        .addService(VoluntasIntentServiceGrpcImpl(service, fileName))
-        .addService(VoluntasServiceGrpcImpl(service, fileName))
+        .addService(VoluntasIntentServiceGrpcImpl(service, fileName, stateDispatcher))
+        .addService(VoluntasServiceGrpcImpl(service, fileName, stateDispatcher))
         .addService(ProtoReflectionService.newInstance())
         .build()
 
@@ -29,7 +38,7 @@ class VoluntasRuntime(
         println("Voluntas server started on port $port")
 
         if (webPort != null) {
-            webServer = IntentWebServer(webPort, service).also { it.start() }
+            webServer = IntentWebServer(webPort, service, stateDispatcher).also { it.start() }
         }
 
         Runtime.getRuntime().addShutdownHook(Thread {
@@ -41,6 +50,7 @@ class VoluntasRuntime(
     fun stop() {
         webServer?.stop()
         server.shutdown()
+        stateDispatcher.close()
     }
 
     fun blockUntilShutdown() {
@@ -74,30 +84,33 @@ class VoluntasRuntime(
  *
  * Delegates to service.consume(SubmitOpRequest) for all mutations.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class VoluntasIntentServiceGrpcImpl(
     private val service: VoluntasIntentService,
-    private val fileName: String
+    private val fileName: String,
+    private val stateDispatcher: CloseableCoroutineDispatcher
 ) : IntentServiceGrpcKt.IntentServiceCoroutineImplBase() {
 
     override suspend fun submitOp(request: SubmitOpRequest): SubmitOpResponse {
-        return try {
-            val result = service.consume(request)
-            service.writeToFile(fileName)
+        return withContext(stateDispatcher) {
+            try {
+                val result = service.consume(request)
+                service.writeToFile(fileName)
 
-            // Extract the id from the result message (format: "added intent X" or similar)
-            val id = extractIdFromResult(result.message)
+                val id = extractIdFromResult(result.message)
 
-            SubmitOpResponse.newBuilder()
-                .setSuccess(true)
-                .setMessage(result.message)
-                .setId(id)
-                .build()
-        } catch (e: IllegalArgumentException) {
-            SubmitOpResponse.newBuilder()
-                .setSuccess(false)
-                .setMessage(e.message ?: "Unknown error")
-                .setId(0)
-                .build()
+                SubmitOpResponse.newBuilder()
+                    .setSuccess(true)
+                    .setMessage(result.message)
+                    .setId(id)
+                    .build()
+            } catch (e: IllegalArgumentException) {
+                SubmitOpResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(e.message ?: "Unknown error")
+                    .setId(0)
+                    .build()
+            }
         }
     }
 
@@ -108,35 +121,39 @@ class VoluntasIntentServiceGrpcImpl(
     }
 
     override suspend fun getIntent(request: GetIntentRequest): GetIntentResponse {
-        val intent = service.getById(request.id)
+        return withContext(stateDispatcher) {
+            val intent = service.getById(request.id)
 
-        return if (intent != null) {
-            GetIntentResponse.newBuilder()
-                .setFound(true)
-                .setIntent(intentToProto(intent))
-                .build()
-        } else {
-            GetIntentResponse.newBuilder()
-                .setFound(false)
-                .setError("No intent found with id ${request.id}")
-                .build()
+            if (intent != null) {
+                GetIntentResponse.newBuilder()
+                    .setFound(true)
+                    .setIntent(intentToProto(intent))
+                    .build()
+            } else {
+                GetIntentResponse.newBuilder()
+                    .setFound(false)
+                    .setError("No intent found with id ${request.id}")
+                    .build()
+            }
         }
     }
 
     override suspend fun getFocalScope(request: GetFocalScopeRequest): GetFocalScopeResponse {
-        return try {
-            val scope = service.getFocalScope(request.id)
-            GetFocalScopeResponse.newBuilder()
-                .setFound(true)
-                .setFocus(intentToProto(scope.focus))
-                .addAllAncestry(scope.ancestry.map { intentToProto(it) })
-                .addAllChildren(scope.children.map { intentToProto(it) })
-                .build()
-        } catch (e: Exception) {
-            GetFocalScopeResponse.newBuilder()
-                .setFound(false)
-                .setError("No intent found with id ${request.id}: ${e.message}")
-                .build()
+        return withContext(stateDispatcher) {
+            try {
+                val scope = service.getFocalScope(request.id)
+                GetFocalScopeResponse.newBuilder()
+                    .setFound(true)
+                    .setFocus(intentToProto(scope.focus))
+                    .addAllAncestry(scope.ancestry.map { intentToProto(it) })
+                    .addAllChildren(scope.children.map { intentToProto(it) })
+                    .build()
+            } catch (e: Exception) {
+                GetFocalScopeResponse.newBuilder()
+                    .setFound(false)
+                    .setError("No intent found with id ${request.id}: ${e.message}")
+                    .build()
+            }
         }
     }
 }
@@ -145,40 +162,46 @@ class VoluntasIntentServiceGrpcImpl(
  * gRPC impl for the Voluntas-native service.
  * Accepts raw Relationships and Literals.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class VoluntasServiceGrpcImpl(
     private val service: VoluntasIntentService,
-    private val fileName: String
+    private val fileName: String,
+    private val stateDispatcher: CloseableCoroutineDispatcher
 ) : VoluntasServiceGrpcKt.VoluntasServiceCoroutineImplBase() {
 
     override suspend fun submitRelationship(request: SubmitRelationshipRequest): SubmitRelationshipResponse {
-        return try {
-            val result = (service as VoluntasStreamConsumer).consume(request.relationship)
-            service.writeToFile(fileName)
-            SubmitRelationshipResponse.newBuilder()
-                .setSuccess(true)
-                .setMessage(result.message)
-                .build()
-        } catch (e: Exception) {
-            SubmitRelationshipResponse.newBuilder()
-                .setSuccess(false)
-                .setMessage(e.message ?: "Unknown error")
-                .build()
+        return withContext(stateDispatcher) {
+            try {
+                val result = (service as VoluntasStreamConsumer).consume(request.relationship)
+                service.writeToFile(fileName)
+                SubmitRelationshipResponse.newBuilder()
+                    .setSuccess(true)
+                    .setMessage(result.message)
+                    .build()
+            } catch (e: Exception) {
+                SubmitRelationshipResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(e.message ?: "Unknown error")
+                    .build()
+            }
         }
     }
 
     override suspend fun submitLiteral(request: SubmitLiteralRequest): SubmitLiteralResponse {
-        return try {
-            service.literalStore.register(request.literal)
-            service.writeToFile(fileName)
-            SubmitLiteralResponse.newBuilder()
-                .setSuccess(true)
-                .setMessage("registered literal ${request.literal.id}")
-                .build()
-        } catch (e: Exception) {
-            SubmitLiteralResponse.newBuilder()
-                .setSuccess(false)
-                .setMessage(e.message ?: "Unknown error")
-                .build()
+        return withContext(stateDispatcher) {
+            try {
+                service.literalStore.register(request.literal)
+                service.writeToFile(fileName)
+                SubmitLiteralResponse.newBuilder()
+                    .setSuccess(true)
+                    .setMessage("registered literal ${request.literal.id}")
+                    .build()
+            } catch (e: Exception) {
+                SubmitLiteralResponse.newBuilder()
+                    .setSuccess(false)
+                    .setMessage(e.message ?: "Unknown error")
+                    .build()
+            }
         }
     }
 }

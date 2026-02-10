@@ -11,16 +11,19 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 
 class IntentWebServer(
     private val port: Int,
-    private val stateProvider: IntentStateProvider
+    private val stateProvider: IntentStateProvider,
+    private val stateDispatcher: CoroutineDispatcher
 ) {
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
 
     fun start() {
         server = embeddedServer(Netty, port = port) {
-            configureWebApp(stateProvider)
+            configureWebApp(stateProvider, stateDispatcher)
         }.start(wait = false)
         println("Web server started on port $port")
     }
@@ -31,7 +34,10 @@ class IntentWebServer(
     }
 }
 
-fun Application.configureWebApp(stateProvider: IntentStateProvider) {
+fun Application.configureWebApp(
+    stateProvider: IntentStateProvider,
+    stateDispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
+) {
     install(ContentNegotiation) {
         gson()
     }
@@ -48,7 +54,9 @@ fun Application.configureWebApp(stateProvider: IntentStateProvider) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid intent id"))
                 return@get
             }
-            val intent = stateProvider.getById(id)
+            val intent = withContext(stateDispatcher) {
+                stateProvider.getById(id)
+            }
             if (intent == null) {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to "Intent not found"))
                 return@get
