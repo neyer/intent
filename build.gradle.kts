@@ -13,6 +13,7 @@ repositories {
 
 val grpcVersion = "1.62.2"
 val grpcKotlinVersion = "1.4.1"
+val ktorVersion = "3.1.1"
 
 dependencies {
     implementation("com.google.protobuf:protobuf-kotlin:3.25.3")
@@ -27,10 +28,21 @@ dependencies {
     implementation("io.grpc:grpc-services:$grpcVersion")  // For reflection
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
 
+    // Ktor web server dependencies
+    implementation(platform("io.ktor:ktor-bom:$ktorVersion"))
+    implementation("io.ktor:ktor-server-core")
+    implementation("io.ktor:ktor-server-netty")
+    implementation("io.ktor:ktor-server-html-builder")
+    implementation("io.ktor:ktor-server-websockets")
+    implementation("io.ktor:ktor-server-content-negotiation")
+    implementation("io.ktor:ktor-serialization-gson")
+
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.2")
     testImplementation("org.mockito:mockito-core:5.5.0")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.1.0")
+    testImplementation("io.ktor:ktor-server-test-host")
+    testImplementation("io.ktor:ktor-client-content-negotiation")
 }
 
 tasks.test {
@@ -73,7 +85,7 @@ tasks.register<JavaExec>("runServer") {
     description = "Run the Voluntas gRPC server"
     mainClass.set("com.intentevolved.com.intentevolved.voluntas.VoluntasRuntime")
     classpath = sourceSets["main"].runtimeClasspath
-    args = listOf("50051", "voluntas_current.pb")
+    args = listOf("50051", "voluntas_current.pb", "8080")
 }
 
 // Task to run the terminal client

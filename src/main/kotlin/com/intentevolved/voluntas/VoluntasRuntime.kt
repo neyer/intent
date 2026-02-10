@@ -3,6 +3,7 @@ package com.intentevolved.com.intentevolved.voluntas
 import com.intentevolved.com.intentevolved.FocalScope
 import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.IntentService
+import com.intentevolved.com.intentevolved.server.IntentWebServer
 import io.grpc.Server
 import io.grpc.ServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
@@ -11,7 +12,8 @@ import voluntas.v1.*
 class VoluntasRuntime(
     private val port: Int,
     private val service: VoluntasIntentService,
-    private val fileName: String
+    private val fileName: String,
+    private val webPort: Int? = null
 ) {
     private val server: Server = ServerBuilder
         .forPort(port)
@@ -20,9 +22,16 @@ class VoluntasRuntime(
         .addService(ProtoReflectionService.newInstance())
         .build()
 
+    private var webServer: IntentWebServer? = null
+
     fun start() {
         server.start()
         println("Voluntas server started on port $port")
+
+        if (webPort != null) {
+            webServer = IntentWebServer(webPort, service).also { it.start() }
+        }
+
         Runtime.getRuntime().addShutdownHook(Thread {
             println("Shutting down Voluntas server...")
             stop()
@@ -30,6 +39,7 @@ class VoluntasRuntime(
     }
 
     fun stop() {
+        webServer?.stop()
         server.shutdown()
     }
 
@@ -42,6 +52,7 @@ class VoluntasRuntime(
         fun main(args: Array<String>) {
             val port = args.getOrNull(0)?.toIntOrNull() ?: 50051
             val fileName = args.getOrNull(1) ?: "voluntas_current.pb"
+            val webPort = args.getOrNull(2)?.toIntOrNull()
 
             val service = try {
                 println("Loading voluntas stream from $fileName")
@@ -51,7 +62,7 @@ class VoluntasRuntime(
                 VoluntasIntentService.new("Voluntas Server Root")
             }
 
-            val server = VoluntasRuntime(port, service, fileName)
+            val server = VoluntasRuntime(port, service, fileName, webPort)
             server.start()
             server.blockUntilShutdown()
         }

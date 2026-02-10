@@ -276,7 +276,7 @@ class VoluntasRuntimeTest {
 
         // Verify the literal is accessible
         val stored = service.literalStore.getById(litId)
-        assertNotNull(stored)
+        Assertions.assertNotNull(stored)
         assertEquals("test literal value", stored!!.stringVal)
     }
 
@@ -376,7 +376,7 @@ class VoluntasRuntimeTest {
 
         // Root should still have its text in ancestry
         val rootInAncestry = scope.ancestryList.find { it.id == 0L }
-        assertNotNull(rootInAncestry)
+        Assertions.assertNotNull(rootInAncestry)
         assertEquals("Runtime Test Root", rootInAncestry!!.text)
     }
 }
