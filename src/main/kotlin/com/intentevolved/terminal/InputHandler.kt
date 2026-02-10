@@ -254,6 +254,77 @@ class DoCommand : Command("do") {
     }
 }
 
+class WriteCommand : Command("write") {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
+        val filePath = args.trim()
+        if (filePath.isEmpty()) {
+            return CommandResult("write requires a file path")
+        }
+
+        val scope = stateProvider.getFocalScope(focalIntent)
+        val sb = StringBuilder()
+
+        // Context section: why we're doing this, derived from ancestry
+        sb.appendLine("# Context")
+        sb.appendLine()
+        if (scope.ancestry.isNotEmpty()) {
+            sb.appendLine("This is why we're doing this:")
+            sb.appendLine()
+            for (ancestor in scope.ancestry) {
+                sb.appendLine("- [${ancestor.id()}] ${ancestor.text()}")
+            }
+            sb.appendLine()
+        }
+
+        // Focus section
+        sb.appendLine("# Current Focus")
+        sb.appendLine()
+        sb.appendLine("[${scope.focus.id()}] ${scope.focus.text()}")
+        val focusFields = scope.focus.fieldValues()
+        if (focusFields.isNotEmpty()) {
+            for ((name, value) in focusFields) {
+                sb.appendLine("  $name: $value")
+            }
+        }
+        sb.appendLine()
+
+        // Plan section: full subtree of children
+        val nonMetaChildren = scope.children.filter { !it.isMeta() }
+        if (nonMetaChildren.isNotEmpty()) {
+            sb.appendLine("# Plan")
+            sb.appendLine()
+
+            fun writeSubtree(intentId: Long, depth: Int) {
+                val childScope = stateProvider.getFocalScope(intentId)
+                val indent = "  ".repeat(depth)
+                sb.appendLine("$indent- [${childScope.focus.id()}] ${childScope.focus.text()}")
+                val fields = childScope.focus.fieldValues()
+                if (fields.isNotEmpty()) {
+                    for ((name, value) in fields) {
+                        sb.appendLine("$indent    $name: $value")
+                    }
+                }
+                for (grandchild in childScope.children.filter { !it.isMeta() }) {
+                    writeSubtree(grandchild.id(), depth + 1)
+                }
+            }
+
+            for (child in nonMetaChildren) {
+                writeSubtree(child.id(), 0)
+            }
+            sb.appendLine()
+        }
+
+        File(filePath).writeText(sb.toString())
+        return CommandResult("Wrote plan to $filePath")
+    }
+}
+
 class ImportCommand : Command("import") {
     override fun process(
         args: String,
@@ -357,6 +428,7 @@ class CommandExecutor(
         UpCommand(),
         MoveCommand(),
         DoCommand(),
+        WriteCommand(),
         ImportCommand()
     )
 

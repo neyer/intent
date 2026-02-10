@@ -215,4 +215,66 @@ class InputHandlerTest {
         assertEquals(1, grandchildren.size)
         assertEquals("grandchild", grandchildren[0].text())
     }
+
+    @Test
+    fun `Write command outputs plan file with ancestry, focus, and children`() {
+        val service = VoluntasIntentService.new("big picture goal")
+        val h = InputHandler(service, service)
+
+        // Create a child under root
+        "add milestone".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        val milestoneId = h.commandResult.removePrefix("added intent ").toLong()
+
+        // Focus on the milestone
+        "focus $milestoneId".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+
+        // Add children under the milestone
+        "add step one".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        val step1Id = h.commandResult.removePrefix("added intent ").toLong()
+
+        "add step two".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        val step2Id = h.commandResult.removePrefix("added intent ").toLong()
+
+        // Add a grandchild under step one
+        "focus $step1Id".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+
+        "add substep A".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+        val substepAId = h.commandResult.removePrefix("added intent ").toLong()
+
+        // Go back to milestone to write the plan from there
+        "focus $milestoneId".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+
+        // Write the plan file
+        val tempFile = File.createTempFile("write-test", ".txt")
+        tempFile.deleteOnExit()
+
+        "write ${tempFile.absolutePath}".forEach { h.handleKeyStroke(ch(it)) }
+        h.handleKeyStroke(enter())
+
+        assertEquals("Wrote plan to ${tempFile.absolutePath}", h.commandResult)
+
+        val content = tempFile.readText()
+
+        // Ancestry should explain why: root is the ancestor
+        assertTrue(content.contains("# Context"))
+        assertTrue(content.contains("This is why we're doing this:"))
+        assertTrue(content.contains("[0] big picture goal"))
+
+        // Focus section
+        assertTrue(content.contains("# Current Focus"))
+        assertTrue(content.contains("[$milestoneId] milestone"))
+
+        // Children section includes direct children and grandchildren
+        assertTrue(content.contains("# Plan"))
+        assertTrue(content.contains("[$step1Id] step one"))
+        assertTrue(content.contains("[$step2Id] step two"))
+        assertTrue(content.contains("[$substepAId] substep A"))
+    }
 }

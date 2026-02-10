@@ -1,0 +1,25 @@
+# Context
+
+This is why we're doing this:
+
+- [0] Love and Serve God
+- [1002] Love and Serve World
+- [1003] Build Useful Things
+- [1004] Build Intent Protocol
+- [1005] Add a web interface to the Intent Server
+
+# Current Focus
+
+[1006] Set up web server infrastructure using Ktor
+
+# Plan
+
+- [1007] Add Ktor dependencies to build.gradle.kts (ktor-server-netty, ktor-server-html-builder, ktor-server-websockets)
+- [1008] Create WebServer.kt in server package with Ktor application setup
+- [1009] Configure routing for static files, API endpoints, and WebSocket
+- [1010] Add command line option to IntentServer to enable web interface on configurable port (default 8080)
+- [1011] Ensure web server and gRPC server can run concurrently
+- [1043] Write integration test that starts server and runs checks
+  - [1044] test that the server returns an 'ok' response to a test endpoint
+  - [1047] test that an attempt to get intent 0 works
+
