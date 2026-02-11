@@ -117,15 +117,7 @@ message Stream {
 //   3: instantiates      - Creates an instance of a type
 //   4: sets_field        - Sets a field value on an entity
 //   5: adds_participant  - Adds a participant to an entity
-//   6: depends_on        - Asserts dependency between entities
 //
-// Reserved Literal IDs for bootstrap names:
-//   0x8000000000000001: "defines_type"
-//   0x8000000000000002: "defines_field"
-//   0x8000000000000003: "instantiates"
-//   0x8000000000000004: "sets_field"
-//   0x8000000000000005: "binds_name"
-//   0x8000000000000006: "depends_on"
 
 // ============================================================================
 // gRPC Service Definition
