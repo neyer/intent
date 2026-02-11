@@ -69,6 +69,15 @@ class VoluntasIntentService private constructor(
             service.replayStream(stream)
             return service
         }
+
+        /**
+         * Create a service by replaying a Stream protobuf object.
+         */
+        fun fromStream(stream: Stream): VoluntasIntentService {
+            val service = VoluntasIntentService(streamId = stream.streamId)
+            service.replayStream(stream)
+            return service
+        }
     }
 
     val literalStore = LiteralStore()
@@ -154,14 +163,24 @@ class VoluntasIntentService private constructor(
     private fun handleDefinesType(rel: Relationship) {
         // Entity rel.id is now a type. We create a meta-intent for it.
         val id = rel.id.toLong()
+        val participants = rel.participantsList
+        val moduleEntityId = if (participants.size >= 2) participants[1] else null
+
         if (!byId.containsKey(id)) {
             byId[id] = IntentImpl(
                 text = "Type:${id}",
                 id = id,
+                participantIds = if (moduleEntityId != null) mutableListOf(moduleEntityId) else mutableListOf(),
                 stateProvider = this,
                 isMeta = true
             )
         }
+
+        // Link type as child of module entity
+        if (moduleEntityId != null) {
+            linkChild(moduleEntityId, id)
+        }
+
         trackEntityId(id)
     }
 
@@ -540,6 +559,38 @@ class VoluntasIntentService private constructor(
     }
 
     override fun getAll(): List<Intent> = byId.values.filter { !it.isMeta() }
+
+    /** Expose all entities (including meta) for module matching. */
+    fun getAllEntities(): Map<Long, Intent> = byId.toMap()
+
+    /** Allocate a fresh entity ID. */
+    fun allocateEntityId(): Long = nextEntityId++
+
+    /**
+     * Emit a relationship with full literal op emission (like emitRelationship).
+     * Used by ModuleLoader to ensure literal ops are persisted in the stream.
+     */
+    fun emitOp(rel: Relationship) {
+        emitRelationship(rel)
+    }
+
+    /**
+     * Define a new type entity, optionally linked to a module entity.
+     * Emits DEFINES_TYPE and SETS_FIELD for the type name.
+     * Returns the new type entity ID.
+     */
+    fun defineType(name: String, moduleEntityId: Long? = null): Long {
+        val id = nextEntityId++
+        val builder = Relationship.newBuilder()
+            .setId(id)
+            .addParticipants(VoluntasIds.DEFINES_TYPE)
+        if (moduleEntityId != null) {
+            builder.addParticipants(moduleEntityId)
+        }
+        emitRelationship(builder.build())
+        edit(id, name)
+        return id
+    }
 
     override fun writeToFile(fileName: String) {
         val streamBuilder = Stream.newBuilder()

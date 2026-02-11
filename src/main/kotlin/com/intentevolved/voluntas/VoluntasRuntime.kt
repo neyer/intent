@@ -13,13 +13,15 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.withContext
 import voluntas.v1.*
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
 class VoluntasRuntime(
     private val port: Int,
     private val service: VoluntasIntentService,
     private val fileName: String,
-    private val webPort: Int? = null
+    private val webPort: Int? = null,
+    private val modulesDir: String? = null
 ) {
     // this enforces that there's exactly one thread messing with the service
     private val stateDispatcher: CloseableCoroutineDispatcher = newSingleThreadContext("intent-state")
@@ -34,6 +36,10 @@ class VoluntasRuntime(
     private var webServer: IntentWebServer? = null
 
     fun start() {
+        if (modulesDir != null) {
+            loadModules(modulesDir)
+        }
+
         server.start()
         println("Voluntas server started on port $port")
 
@@ -45,6 +51,30 @@ class VoluntasRuntime(
             println("Shutting down Voluntas server...")
             stop()
         })
+    }
+
+    private fun loadModules(dir: String) {
+        val modulesDirectory = File(dir)
+        if (!modulesDirectory.isDirectory) {
+            println("Modules directory '$dir' not found, skipping module loading")
+            return
+        }
+        val pbFiles = modulesDirectory.listFiles { f -> f.extension == "pb" } ?: return
+        if (pbFiles.isEmpty()) {
+            println("No .pb module files found in '$dir'")
+            return
+        }
+
+        val loader = ModuleLoader(service)
+        for (file in pbFiles.sortedBy { it.name }) {
+            println("Loading module: ${file.name}")
+            val module = VoluntasModule.fromFile(file.absolutePath)
+            val manifest = loader.loadModule(module)
+            println("  Module '${module.rootText}': ${manifest.newlyCreated.size} created, ${manifest.alreadyExisted.size} existing")
+        }
+
+        service.writeToFile(fileName)
+        println("Modules loaded, stream saved")
     }
 
     fun stop() {
@@ -63,6 +93,7 @@ class VoluntasRuntime(
             val port = args.getOrNull(0)?.toIntOrNull() ?: 50051
             val fileName = args.getOrNull(1) ?: "voluntas_current.pb"
             val webPort = args.getOrNull(2)?.toIntOrNull()
+            val modulesDir = args.getOrNull(3)
 
             val service = try {
                 println("Loading voluntas stream from $fileName")
@@ -72,7 +103,7 @@ class VoluntasRuntime(
                 VoluntasIntentService.new("Voluntas Server Root")
             }
 
-            val server = VoluntasRuntime(port, service, fileName, webPort)
+            val server = VoluntasRuntime(port, service, fileName, webPort, modulesDir)
             server.start()
             server.blockUntilShutdown()
         }
