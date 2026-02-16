@@ -26,10 +26,13 @@ class VoluntasRuntime(
     // this enforces that there's exactly one thread messing with the service
     private val stateDispatcher: CloseableCoroutineDispatcher = newSingleThreadContext("intent-state")
 
+    private val intentServiceGrpc = VoluntasIntentServiceGrpcImpl(service, fileName, stateDispatcher)
+    private val voluntasServiceGrpc = VoluntasServiceGrpcImpl(service, fileName, stateDispatcher)
+
     private val server: Server = ServerBuilder
         .forPort(port)
-        .addService(VoluntasIntentServiceGrpcImpl(service, fileName, stateDispatcher))
-        .addService(VoluntasServiceGrpcImpl(service, fileName, stateDispatcher))
+        .addService(intentServiceGrpc)
+        .addService(voluntasServiceGrpc)
         .addService(ProtoReflectionService.newInstance())
         .build()
 
@@ -45,9 +48,14 @@ class VoluntasRuntime(
 
         if (webPort != null) {
             println("Voluntas web server started on port $port")
-            webServer = IntentWebServer(webPort, service, service, stateDispatcher) {
+            val ws = IntentWebServer(webPort, service, service, stateDispatcher) {
                 service.writeToFile(fileName)
-            }.also { it.start() }
+            }
+            ws.start()
+            webServer = ws
+            val broadcastCallback: suspend () -> Unit = { ws.broadcastAll() }
+            intentServiceGrpc.onMutation = broadcastCallback
+            voluntasServiceGrpc.onMutation = broadcastCallback
         }
 
         Runtime.getRuntime().addShutdownHook(Thread {
@@ -125,8 +133,10 @@ class VoluntasIntentServiceGrpcImpl(
     private val stateDispatcher: CloseableCoroutineDispatcher
 ) : IntentServiceGrpcKt.IntentServiceCoroutineImplBase() {
 
+    var onMutation: (suspend () -> Unit)? = null
+
     override suspend fun submitOp(request: SubmitOpRequest): SubmitOpResponse {
-        return withContext(stateDispatcher) {
+        val response = withContext(stateDispatcher) {
             try {
                 val result = service.consume(request)
                 service.writeToFile(fileName)
@@ -146,6 +156,8 @@ class VoluntasIntentServiceGrpcImpl(
                     .build()
             }
         }
+        if (response.success) onMutation?.invoke()
+        return response
     }
 
     private fun extractIdFromResult(message: String): Long {
@@ -203,8 +215,10 @@ class VoluntasServiceGrpcImpl(
     private val stateDispatcher: CloseableCoroutineDispatcher
 ) : VoluntasServiceGrpcKt.VoluntasServiceCoroutineImplBase() {
 
+    var onMutation: (suspend () -> Unit)? = null
+
     override suspend fun submitRelationship(request: SubmitRelationshipRequest): SubmitRelationshipResponse {
-        return withContext(stateDispatcher) {
+        val response = withContext(stateDispatcher) {
             try {
                 val result = (service as VoluntasStreamConsumer).consume(request.relationship)
                 service.writeToFile(fileName)
@@ -219,6 +233,8 @@ class VoluntasServiceGrpcImpl(
                     .build()
             }
         }
+        if (response.success) onMutation?.invoke()
+        return response
     }
 
     override suspend fun submitLiteral(request: SubmitLiteralRequest): SubmitLiteralResponse {

@@ -29,10 +29,12 @@ class IntentWebServer(
     private val onMutation: suspend () -> Unit = {}
 ) {
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
+    private val sessionManager = SessionManager(consumer, stateProvider)
+    private val gson = Gson()
 
     fun start() {
         server = embeddedServer(Netty, port = port) {
-            configureWebApp(stateProvider, consumer, stateDispatcher, onMutation)
+            configureWebApp(stateProvider, consumer, stateDispatcher, onMutation, sessionManager, gson)
         }.start(wait = false)
         println("Web server started on port $port")
     }
@@ -41,21 +43,33 @@ class IntentWebServer(
         server?.stop(1000, 2000)
         println("Web server stopped")
     }
+
+    suspend fun broadcastAll() {
+        for ((session, ws) in sessionManager.connectedSessions()) {
+            try {
+                val scope = withContext(stateDispatcher) {
+                    stateProvider.getFocalScope(session.focalIntent)
+                }
+                ws.send(Frame.Text(gson.toJson(buildTreeUpdateMessage(scope, session.focalIntent))))
+            } catch (_: Exception) {
+                // Connection may have closed
+            }
+        }
+    }
 }
 
 fun Application.configureWebApp(
     stateProvider: IntentStateProvider,
     consumer: IntentStreamConsumer,
     stateDispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
-    onMutation: suspend () -> Unit = {}
+    onMutation: suspend () -> Unit = {},
+    sessionManager: SessionManager = SessionManager(consumer, stateProvider),
+    gson: Gson = Gson()
 ) {
     install(ContentNegotiation) {
         gson()
     }
     install(WebSockets)
-
-    val gson = Gson()
-    val sessionManager = SessionManager(consumer, stateProvider)
 
     suspend fun broadcastTreeUpdate(excludeSessionId: String?) {
         for ((session, ws) in sessionManager.connectedSessions()) {

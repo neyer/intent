@@ -141,14 +141,14 @@ class UpCommand : Command("up") {
             return CommandResult("Up takes no arguments.")
         }
 
-        // For now, treat 0 as the root; no interaction with the service.
         if (focalIntent == 0L) {
-            return CommandResult("At root intent, cannot go up ")
+            return CommandResult("At root intent, cannot go up")
         }
 
-        // We don't currently have parent linkage without querying the service,
-        // so simply move focus back to the root.
-        return CommandResult("Focusing on 0", newFocalIntent = 0L)
+        val scope = stateProvider.getFocalScope(focalIntent)
+        val parent = scope.ancestry.lastOrNull()
+        val parentId = parent?.id() ?: 0L
+        return CommandResult("Focusing on $parentId", newFocalIntent = parentId)
     }
 }
 
