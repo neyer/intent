@@ -17,6 +17,8 @@ function connect() {
                 document.getElementById("result-text").textContent = msg.result;
             }
             renderTree(msg);
+        } else if (msg.type === "tree_update") {
+            renderTree(msg);
         }
     };
 

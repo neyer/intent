@@ -3,6 +3,7 @@ package com.intentevolved.com.intentevolved.server
 import com.intentevolved.com.intentevolved.IntentStateProvider
 import com.intentevolved.com.intentevolved.IntentStreamConsumer
 import com.intentevolved.com.intentevolved.terminal.CommandExecutor
+import io.ktor.server.websocket.*
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -17,6 +18,7 @@ class SessionManager(
     private val stateProvider: IntentStateProvider
 ) {
     private val sessions = ConcurrentHashMap<String, WebSessionState>()
+    private val connections = ConcurrentHashMap<String, WebSocketServerSession>()
 
     fun getOrCreate(sessionId: String?): WebSessionState {
         if (sessionId != null) {
@@ -32,4 +34,19 @@ class SessionManager(
     }
 
     fun get(sessionId: String): WebSessionState? = sessions[sessionId]
+
+    fun registerConnection(sessionId: String, wsSession: WebSocketServerSession) {
+        connections[sessionId] = wsSession
+    }
+
+    fun removeConnection(sessionId: String) {
+        connections.remove(sessionId)
+        sessions.remove(sessionId)
+    }
+
+    fun connectedSessions(): List<Pair<WebSessionState, WebSocketServerSession>> {
+        return connections.mapNotNull { (sessionId, ws) ->
+            sessions[sessionId]?.let { it to ws }
+        }
+    }
 }

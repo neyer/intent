@@ -57,6 +57,20 @@ fun Application.configureWebApp(
     val gson = Gson()
     val sessionManager = SessionManager(consumer, stateProvider)
 
+    suspend fun broadcastTreeUpdate(excludeSessionId: String?) {
+        for ((session, ws) in sessionManager.connectedSessions()) {
+            if (session.sessionId == excludeSessionId) continue
+            try {
+                val scope = withContext(stateDispatcher) {
+                    stateProvider.getFocalScope(session.focalIntent)
+                }
+                ws.send(Frame.Text(gson.toJson(buildTreeUpdateMessage(scope, session.focalIntent))))
+            } catch (_: Exception) {
+                // Connection may have closed between iteration and send
+            }
+        }
+    }
+
     routing {
         get("/health") {
             call.respond(mapOf("status" to "ok"))
@@ -120,36 +134,48 @@ fun Application.configureWebApp(
             }
 
             call.respond(buildCommandResponse(session.sessionId, result, session.focalIntent, scope))
+
+            // Broadcast to all WebSocket clients except this REST session
+            broadcastTreeUpdate(session.sessionId)
         }
 
         // WebSocket endpoint
         webSocket("/ws") {
             val session = sessionManager.getOrCreate(null)
+            sessionManager.registerConnection(session.sessionId, this)
 
-            // Send initial scope
-            val initialScope = withContext(stateDispatcher) {
-                stateProvider.getFocalScope(session.focalIntent)
-            }
-            send(Frame.Text(gson.toJson(buildScopeMessage(initialScope, session.focalIntent, ""))))
-
-            for (frame in incoming) {
-                if (frame is Frame.Text) {
-                    val text = frame.readText()
-                    val msg = gson.fromJson(text, Map::class.java)
-                    val command = msg["command"] as? String ?: continue
-
-                    val (result, newFocalIntent) = withContext(stateDispatcher) {
-                        val pair = session.executor.execute(command, session.focalIntent)
-                        onMutation()
-                        pair
-                    }
-                    session.focalIntent = newFocalIntent
-
-                    val scope = withContext(stateDispatcher) {
-                        stateProvider.getFocalScope(session.focalIntent)
-                    }
-                    send(Frame.Text(gson.toJson(buildScopeMessage(scope, session.focalIntent, result))))
+            try {
+                // Send initial scope
+                val initialScope = withContext(stateDispatcher) {
+                    stateProvider.getFocalScope(session.focalIntent)
                 }
+                send(Frame.Text(gson.toJson(buildScopeMessage(initialScope, session.focalIntent, ""))))
+
+                for (frame in incoming) {
+                    if (frame is Frame.Text) {
+                        val text = frame.readText()
+                        val msg = gson.fromJson(text, Map::class.java)
+                        val command = msg["command"] as? String ?: continue
+
+                        val (result, newFocalIntent) = withContext(stateDispatcher) {
+                            val pair = session.executor.execute(command, session.focalIntent)
+                            onMutation()
+                            pair
+                        }
+                        session.focalIntent = newFocalIntent
+
+                        val scope = withContext(stateDispatcher) {
+                            stateProvider.getFocalScope(session.focalIntent)
+                        }
+                        // Send RESULT to the commanding client
+                        send(Frame.Text(gson.toJson(buildScopeMessage(scope, session.focalIntent, result))))
+
+                        // Broadcast TREE_UPDATE to all other connected clients
+                        broadcastTreeUpdate(session.sessionId)
+                    }
+                }
+            } finally {
+                sessionManager.removeConnection(session.sessionId)
             }
         }
 
@@ -157,7 +183,7 @@ fun Application.configureWebApp(
     }
 }
 
-// --- [1024] JSON serialization ---
+// --- JSON serialization ---
 
 private fun buildCommandResponse(
     sessionId: String,
@@ -179,6 +205,17 @@ private fun buildScopeMessage(
     "type" to "scope",
     "focalIntent" to focalIntent,
     "result" to result,
+    "focus" to scope.focus.toTreeMap(),
+    "ancestry" to scope.ancestry.map { it.toTreeMap() },
+    "children" to scope.children.map { it.toTreeMap() }
+)
+
+private fun buildTreeUpdateMessage(
+    scope: FocalScope,
+    focalIntent: Long
+): Map<String, Any?> = mapOf(
+    "type" to "tree_update",
+    "focalIntent" to focalIntent,
     "focus" to scope.focus.toTreeMap(),
     "ancestry" to scope.ancestry.map { it.toTreeMap() },
     "children" to scope.children.map { it.toTreeMap() }
