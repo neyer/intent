@@ -418,7 +418,10 @@ class VoluntasIntentService private constructor(
     private fun replayStream(stream: Stream) {
         for (op in stream.opsList) {
             when {
-                op.hasLiteral() -> literalStore.register(op.literal)
+                op.hasLiteral() -> {
+                    literalStore.register(op.literal)
+                    ops.add(op)
+                }
                 op.hasRelationship() -> {
                     // Just re-add the op to our list and interpret
                     ops.add(op)
@@ -655,6 +658,18 @@ class VoluntasIntentService private constructor(
 
     override fun consume(relationship: Relationship): CommandResult {
         val timestamp = currentEpochNanos()
+        // Emit literal ops for any literal participants (same as emitRelationship)
+        for (pid in relationship.participantsList) {
+            if (VoluntasIds.isLiteral(pid)) {
+                val lit = literalStore.getById(pid)
+                if (lit != null) {
+                    ops.add(Op.newBuilder()
+                        .setTimestamp(timestamp)
+                        .setLiteral(lit)
+                        .build())
+                }
+            }
+        }
         val relOp = Op.newBuilder()
             .setTimestamp(timestamp)
             .setRelationship(relationship)

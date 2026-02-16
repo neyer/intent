@@ -1,5 +1,6 @@
 package com.intentevolved.com.intentevolved.server
 
+import com.intentevolved.com.intentevolved.FocalScope
 import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.IntentStateProvider
 import com.intentevolved.com.intentevolved.IntentStreamConsumer
@@ -12,6 +13,7 @@ import io.ktor.server.engine.*
 import io.ktor.server.http.content.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
@@ -53,12 +55,14 @@ fun Application.configureWebApp(
     install(WebSockets)
 
     val gson = Gson()
+    val sessionManager = SessionManager(consumer, stateProvider)
 
     routing {
         get("/health") {
             call.respond(mapOf("status" to "ok"))
         }
 
+        // [1023] GET /api/intent/{id} - fetch single intent as JSON
         get("/api/intent/{id}") {
             val id = call.parameters["id"]?.toLongOrNull()
             if (id == null) {
@@ -75,15 +79,58 @@ fun Application.configureWebApp(
             call.respond(intent.toApiMap())
         }
 
+        // [1022] GET /api/scope/{intentId} - fetch focal scope as JSON
+        get("/api/scope/{intentId}") {
+            val intentId = call.parameters["intentId"]?.toLongOrNull()
+            if (intentId == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid intent id"))
+                return@get
+            }
+            try {
+                val scope = withContext(stateDispatcher) {
+                    stateProvider.getFocalScope(intentId)
+                }
+                call.respond(scope.toApiMap())
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Intent not found: ${e.message}"))
+            }
+        }
+
+        // [1021] POST /api/command - submit command, returns result + updated tree
+        post("/api/command") {
+            val body = call.receive<Map<String, Any>>()
+            val command = body["command"] as? String
+            if (command == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing 'command' field"))
+                return@post
+            }
+
+            val sessionId = body["sessionId"] as? String
+            val session = sessionManager.getOrCreate(sessionId)
+
+            val (result, newFocalIntent) = withContext(stateDispatcher) {
+                val pair = session.executor.execute(command, session.focalIntent)
+                onMutation()
+                pair
+            }
+            session.focalIntent = newFocalIntent
+
+            val scope = withContext(stateDispatcher) {
+                stateProvider.getFocalScope(session.focalIntent)
+            }
+
+            call.respond(buildCommandResponse(session.sessionId, result, session.focalIntent, scope))
+        }
+
+        // WebSocket endpoint
         webSocket("/ws") {
-            val executor = CommandExecutor(consumer, stateProvider, null)
-            var focalIntent = 0L
+            val session = sessionManager.getOrCreate(null)
 
             // Send initial scope
             val initialScope = withContext(stateDispatcher) {
-                stateProvider.getFocalScope(focalIntent)
+                stateProvider.getFocalScope(session.focalIntent)
             }
-            send(Frame.Text(gson.toJson(buildScopeMessage(initialScope, focalIntent, ""))))
+            send(Frame.Text(gson.toJson(buildScopeMessage(initialScope, session.focalIntent, ""))))
 
             for (frame in incoming) {
                 if (frame is Frame.Text) {
@@ -92,16 +139,16 @@ fun Application.configureWebApp(
                     val command = msg["command"] as? String ?: continue
 
                     val (result, newFocalIntent) = withContext(stateDispatcher) {
-                        val pair = executor.execute(command, focalIntent)
+                        val pair = session.executor.execute(command, session.focalIntent)
                         onMutation()
                         pair
                     }
-                    focalIntent = newFocalIntent
+                    session.focalIntent = newFocalIntent
 
                     val scope = withContext(stateDispatcher) {
-                        stateProvider.getFocalScope(focalIntent)
+                        stateProvider.getFocalScope(session.focalIntent)
                     }
-                    send(Frame.Text(gson.toJson(buildScopeMessage(scope, focalIntent, result))))
+                    send(Frame.Text(gson.toJson(buildScopeMessage(scope, session.focalIntent, result))))
                 }
             }
         }
@@ -110,8 +157,22 @@ fun Application.configureWebApp(
     }
 }
 
+// --- [1024] JSON serialization ---
+
+private fun buildCommandResponse(
+    sessionId: String,
+    result: String,
+    focalIntent: Long,
+    scope: FocalScope
+): Map<String, Any?> = mapOf(
+    "sessionId" to sessionId,
+    "result" to result,
+    "focalIntent" to focalIntent,
+    "scope" to scope.toApiMap()
+)
+
 private fun buildScopeMessage(
-    scope: com.intentevolved.com.intentevolved.FocalScope,
+    scope: FocalScope,
     focalIntent: Long,
     result: String
 ): Map<String, Any?> = mapOf(
@@ -123,6 +184,12 @@ private fun buildScopeMessage(
     "children" to scope.children.map { it.toTreeMap() }
 )
 
+fun FocalScope.toApiMap(): Map<String, Any?> = mapOf(
+    "focus" to focus.toApiMap(),
+    "ancestry" to ancestry.map { it.toApiMap() },
+    "children" to children.map { it.toApiMap() }
+)
+
 private fun Intent.toTreeMap(): Map<String, Any?> = mapOf(
     "id" to id(),
     "text" to text(),
@@ -131,7 +198,7 @@ private fun Intent.toTreeMap(): Map<String, Any?> = mapOf(
     "fieldValues" to fieldValues()
 )
 
-private fun Intent.toApiMap(): Map<String, Any?> = mapOf(
+fun Intent.toApiMap(): Map<String, Any?> = mapOf(
     "id" to id(),
     "text" to text(),
     "isMeta" to isMeta(),
