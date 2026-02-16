@@ -66,7 +66,7 @@ class InputHandler(
         val command = inputBuffer.toString().trim()
         inputBuffer.clear()
 
-        if (command == "exit") {
+        if (command.equals("exit", ignoreCase = true)) {
             return false;
         }
         else {
@@ -88,10 +88,10 @@ abstract class Command(val keyword: String) {
         focalIntent: Long
     ): CommandResult
 
-    fun matches(command: String): Boolean = command == keyword || command.startsWith("$keyword ")
+    fun matches(command: String): Boolean = command.equals(keyword, ignoreCase = true) || command.startsWith("$keyword ", ignoreCase = true)
 
     fun extractArgs(command: String): String =
-        command.removePrefix(keyword).trim()
+        command.drop(keyword.length).trim()
 }
 
 // Command implementations
