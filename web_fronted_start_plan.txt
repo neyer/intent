@@ -1,0 +1,23 @@
+# Context
+
+This is why we're doing this:
+
+- [0] Love and Serve God
+- [1002] Love and Serve World
+- [1003] Build Useful Things
+- [1004] Build Intent Protocol
+- [1005] Add a web interface to the Intent Server
+
+# Current Focus
+
+[1012] Create HTML/CSS/JS frontend
+
+# Plan
+
+- [1013] Create index.html with basic layout: command input at top, result line below, intent tree below that
+- [1014] Style with CSS: monospace font, dark theme to match terminal aesthetic, indentation for tree hierarchy
+- [1015] Create main.js with: WebSocket connection management, command submission, tree rendering
+- [1016] Implement intent tree renderer that shows ancestry, focus, and children with proper indentation
+- [1017] Display field values indented below each intent, matching terminal display format
+- [1018] Add keyboard handling: Enter to submit command, maintain focus on input box
+

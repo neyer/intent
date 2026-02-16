@@ -1,7 +1,8 @@
-package com.intentevolved
+package com.intentevolved.plans
 
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 import voluntas.v1.FieldType
+import java.io.File
 
 /**
  * Generates the "Software Development Module" — a reusable schema defining
@@ -27,7 +28,7 @@ fun main() {
     service.addField(implementationType, "implements", FieldType.FIELD_TYPE_INTENT_REF, required = false, description = "The system this implementation implements")
 
     // Write to modules directory
-    java.io.File("modules").mkdirs()
+    File("../modules").mkdirs()
     service.writeToFile("modules/software_dev.pb")
     println("Generated modules/software_dev.pb")
 }

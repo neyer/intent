@@ -1,4 +1,4 @@
-package com.intentevolved
+package com.intentevolved.plans
 
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 
