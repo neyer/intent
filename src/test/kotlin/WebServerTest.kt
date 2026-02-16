@@ -20,7 +20,7 @@ class WebServerTest {
     fun `health endpoint returns ok`() = testApplication {
         val service = createTestService()
         application {
-            configureWebApp(service)
+            configureWebApp(service, service)
         }
 
         val response = client.get("/health")
@@ -34,7 +34,7 @@ class WebServerTest {
     fun `get intent 0 returns root intent`() = testApplication {
         val service = createTestService()
         application {
-            configureWebApp(service)
+            configureWebApp(service, service)
         }
 
         val response = client.get("/api/intent/0")
@@ -49,7 +49,7 @@ class WebServerTest {
     fun `get nonexistent intent returns 404`() = testApplication {
         val service = createTestService()
         application {
-            configureWebApp(service)
+            configureWebApp(service, service)
         }
 
         val response = client.get("/api/intent/99999")

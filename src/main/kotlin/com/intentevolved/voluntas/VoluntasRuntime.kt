@@ -41,10 +41,13 @@ class VoluntasRuntime(
         }
 
         server.start()
-        println("Voluntas server started on port $port")
+        println("Voluntas gRPC server started on port $port")
 
         if (webPort != null) {
-            webServer = IntentWebServer(webPort, service, stateDispatcher).also { it.start() }
+            println("Voluntas web server started on port $port")
+            webServer = IntentWebServer(webPort, service, service, stateDispatcher) {
+                service.writeToFile(fileName)
+            }.also { it.start() }
         }
 
         Runtime.getRuntime().addShutdownHook(Thread {

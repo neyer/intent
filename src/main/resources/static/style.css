@@ -1,0 +1,74 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "Consolas", monospace;
+    font-size: 14px;
+    padding: 16px;
+}
+
+#app {
+    max-width: 960px;
+}
+
+/* Input and result lines */
+#input-line, #result-line {
+    line-height: 1.8;
+    white-space: nowrap;
+}
+
+.label {
+    color: #888;
+}
+
+#command-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e0e0e0;
+    font-family: inherit;
+    font-size: inherit;
+    width: 60%;
+    caret-color: #e0e0e0;
+}
+
+#result-text {
+    color: #8be9fd;
+}
+
+/* Intent tree */
+#intent-tree {
+    margin-top: 16px;
+    line-height: 1.6;
+}
+
+.intent-row {
+    white-space: pre;
+}
+
+.intent-row.ancestor {
+    color: #6272a4;
+}
+
+.intent-row.focus {
+    color: #f8f8f2;
+    font-weight: bold;
+}
+
+.intent-row.child {
+    color: #bd93f9;
+}
+
+.field-row {
+    white-space: pre;
+    color: #50fa7b;
+}
+
+.tree-spacer {
+    height: 8px;
+}
