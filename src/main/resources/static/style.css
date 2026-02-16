@@ -51,6 +51,14 @@ body {
     white-space: pre;
 }
 
+.intent-row.clickable {
+    cursor: pointer;
+}
+
+.intent-row.clickable:hover {
+    text-decoration: underline;
+}
+
 .intent-row.ancestor {
     color: #6272a4;
 }
