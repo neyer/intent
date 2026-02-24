@@ -1,56 +1,175 @@
 # Voluntas Intent Protocol
 
-Goal: Enable Cooperative Cognition at Arbitrary Scale. 
+> **Goal:** Enable cooperative cognition at arbitrary scale.
 
-Strategy: Accurately represent the process and structure of intentional thought.
+---
 
-Implementation:
- * the **process of thinking** will be represented of streams of 'ops', each one of which is both an **intent** and a **relationship to previous thoughts**. Thinking is modeled as appending additional intents to a stream of itent.
- * the **struture of thought** will be represented by a collection of Intents, which have
-   * types
-   * names
-   * properties
-  * Intents can be connected by relationships, which are, themselves, Intents. In a voluntas stream, **Everything is said, or done, for one root purpose**.  
-* A given stream of intent ops deterministically produces well-defined application state. Edits, deletes, changes are all expressed as operations and their history can be presered. There is a simple, natural mapping from state->stream, in case change history is not wanted.
+## The Problem
 
-Multiple thinkers can then collaboratively think, together, using a shared stream. Because **all thoughts are expressed as relationships**,  thinkers can comment on, approve, dissapprove, or ask for clarifaiction on any other thoughts.
+Imagine you could look at any line of code and see exactly *why* it was written — tracing it up through the task that required it, the feature it served, the product goal behind that feature, and the business mission at the root of it all. Not as a comment. Not as a Jira ticket linked by a string of institutional memory. As structured, queryable, living data.
 
-Thinkers can also propose and modify defintions of both types and functions, meaning the system becomes a **kind of programming language** as well as a **runtime**.
+That doesn't exist. And its absence causes enormous friction.
 
-If lisp eliminates the distinction between 'code' and 'data', voluntas aims to eliminate the distinction between 'development' and 'runtime'. **Thinking is a mixture of development and  theexecution of code.**
+Here are examples most people in tech recognize immediately:
 
-The end goal of all of this is to build **a system that can allow multiple tinkers, human and machine, to cooperate with minimal friction towards a shared goal.**. 
+- **Design documents drift from code.** The reasoning behind architectural decisions lives in someone's head, a stale wiki page, or a Slack thread that's long since scrolled away.
+- **Merge hell and blocked developers.** Teams block on requirements that exist only as someone's intentions, never articulated as structured data the system can act on.
+- **8,000 Slack channels, all blinking.** Status updates are requested by humans because the data exists in machines — just not in a form that maps back to *purpose*.
+- **Task trackers that miss the point.** Most tools force a single level of granularity. Real work is hierarchically composed: every keystroke happens for a reason, every function call serves a purpose, every feature is one step toward something bigger.
 
+These problems aren't unique to software. They show up in organizations, in politics, in any context where groups of people try to think and act together. Technology is just where they're most visible — and most tractable.
 
-## What the heck
+---
 
-I want to build a system that will allow arbitrary numbers of people to think and work, together, with as little friction as possible.
+## The Idea
 
-The absence of such a system causes problems in many places that most of us simply accept as "inveitable" or "part of life" rather than, "a problem which the right technology can solve." 
+**Voluntas** is a protocol and runtime for representing intentional thought as structured, composable data.
 
-Protocols can, and often do, change the world. I believe **the right application layer protocol can dramatically reduce the friction in cooperative thinking**, such as evolving a software system.
+The core insight is that **everything said or done in a collaborative system is said or done for a reason** — and that reason is itself a kind of computation. If we represent intent explicitly, we can build tools that understand not just *what* is happening, but *why*.
 
-Examples of the problem are:
-* design documents that drift from code, and code that's written for reasons which exist only the heads of developers, rather than in an explicit, articulated place
-* 'merge hell', 'release trains', developers blocked waiting on requirements from people whose job is to context switch and turn priorities and context into strings of text or snippets of audio
-* worksplaces with 8,000 slack channels, all of them blinking, people pinging each other, askign for status updates, when all the data is all in the machines already, just not accessible to us
-* task-tracking software that forces a specific level of granuality, missing misses the hierarchically composed nature of work, where each bash invocation or click of a button happens for a _reason_, where features are completed one keystroke at a time
+### How It Works
 
+**Streams of Intent Operations**
 
-These problems aren't limited to technology. Rather, tech is where they are most visible to me, and the easiest place to solve. 
+Thinking is modeled as a stream of `ops`. Each op is both an **intent** (something being expressed or decided) and a **relationship to prior thoughts**. The stream is append-only: edits, deletions, and revisions are themselves ops. A given stream deterministically produces a well-defined application state, but the full history is always preserved. If you don't need the history, there's a simple mapping from state to stream.
 
-Zooming out a bit, the problem absolutely shows up in poiltics. 
+**Everything Is an Intent**
 
-I have **far too many intelligent friends who disagree** on almost everything except for **the need for intelligent people to find ways of working together** that are do not devolve into a fancy version of monkeys throwing poop at one another. 
+The structure of thought is represented as a collection of `Intent` nodes, each with:
+- a **type**
+- a **name**
+- **properties**
+- **relationships** to other intents (which are themselves intents)
 
-I am building a system that I think can actually solve this problem, by creating a **new protocol** and **shared computing environment** because  "how we talk" and "how we think" are, ultimatley matters of computation. 
+Because relationships are first-class intents, collaborators can comment on, approve, question, or dispute any thought in the system — and those responses are themselves part of the structured record.
 
-I don't think we need to agree on what is sacred in order to better work together. I think we simply need the right lingustic and comptuational tooling. 
+**A Protocol and a Language**
 
-An analogy to neurophysiology helps here. Corproate and social media currently act as something like a shared amygdala: they drive immediate behavior through emotionanl responses to stimuli. We need that, but we also need to evolve beyond it so that we don't remain, at large scales, driven primarly by emotion.
+Thinkers can propose and modify type definitions and functions within the system. This makes Voluntas both a **protocol** for communication and a **programming language with a runtime**. Where Lisp eliminates the distinction between code and data, Voluntas aims to eliminate the distinction between *development* and *runtime*. Thinking is itself a mixture of planning and execution.
 
-I want to give the internet the equivalent of something like a neocortex: a tool for shared, deliberate, thought. Such a system could then be used for planning, and impulse control.
+---
 
-I hope this will become a 'new layer of compute', something like a new operating system, which is inherently social and trans-machine. It should allow one person to plan their own tasks and track their numerous to do items, just as well as it would allow thousands of people to cooperate on complex tasks, with work done by AI agents who can undersatnd _why_ they are doing what they are doing.
+## The Vision
 
-Yes, i know, it's a crazy goal. But that's what I'm aiming for.
+I want to build the infrastructure for a new kind of shared cognition.
+
+The internet today functions largely as a shared amygdala: platforms drive behavior through emotional responses, optimized for engagement, not deliberation. We need that capacity — but we need something more. We need a **neocortex**: a tool for shared, deliberate thought that enables planning, impulse control, and coordinated action at scale.
+
+Voluntas is my attempt to build that layer. It should work as well for one person tracking their own tasks as it does for thousands of people — and AI agents — cooperating on complex, long-horizon goals, with each agent understanding not just *what* it's doing but *why*.
+
+I have too many intelligent friends who disagree on almost everything except one thing: that intelligent people desperately need better tools for working together without devolving into an elaborate version of monkeys throwing poop at each other.
+
+I don't think we need to agree on what is sacred to work together better. I think we need the right linguistic and computational tooling.
+
+Yes, it's a large goal. But that's what I'm aiming for.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Java 17+** (required to run the Gradle build)
+- **[Protocol Buffers CLI (`protoc`)](https://grpc.io/docs/protoc-installation/)** for working with `.pb` files
+- A Unix-like shell (macOS or Linux; WSL works on Windows)
+
+### Build
+
+```bash
+git clone https://github.com/neyer/intent.git
+cd intent
+./gradlew build
+```
+
+### Run the Server
+
+```bash
+./server.sh
+```
+
+The server starts a Voluntas runtime that maintains the intent stream state and handles ops from connected clients and workers.
+
+### Run a Worker
+
+```bash
+./worker.sh
+```
+
+Workers process intent operations. The included `claude_worker.pb` is an example worker definition backed by an AI agent.
+
+### Connect a Client
+
+```bash
+./client.sh
+```
+
+The client connects to the running server and allows you to submit intent ops and query the current state.
+
+### Visualize the Intent Graph
+
+```bash
+./visualize.sh
+```
+
+This generates a visual representation of the current intent DAG. Open `index.html` in a browser to explore the graph interactively.
+
+### Inspect a Protobuf File
+
+```bash
+./print-pb-file.sh voluntas_current.pb
+```
+
+This prints a human-readable version of any `.pb` state file in the repo. The included example files (`tic-tac-toe.pb`, `visualize_timeline_plan.pb`, `web_server_plan.pb`, `voluntas_current.pb`) demonstrate different shapes of intent graphs.
+
+### Mark an Intent Complete
+
+```bash
+./intent-mark.sh <intent-id>
+```
+
+Appends a completion op to the stream for the given intent.
+
+---
+
+## Repository Structure
+
+```
+intent/
+├── src/                        # Kotlin source
+├── gradle/                     # Gradle wrapper
+├── build.gradle.kts            # Build configuration
+├── server.sh                   # Start the Voluntas server
+├── client.sh                   # Connect a client to the server
+├── worker.sh                   # Start a worker process
+├── visualize.sh                # Visualize the intent DAG
+├── intent-mark.sh              # Mark an intent complete
+├── print-pb-file.sh            # Print a .pb file as text
+├── index.html                  # Browser-based graph visualization
+├── voluntas_current.pb         # Current Voluntas project state (self-referential)
+├── claude_worker.pb            # Example AI worker definition
+├── tic-tac-toe.pb              # Example: simple game as an intent graph
+├── web_server_plan.pb          # Example: web server project plan
+└── visualize_timeline_plan.pb  # Example: timeline planning
+```
+
+---
+
+## License
+
+Copyright © 2025 Mark Neyer. All rights reserved.
+
+This software is licensed under the **Voluntas Noncommercial License**.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to use, copy, modify, and distribute the Software **for noncommercial purposes only**, subject to the following conditions:
+
+1. **Noncommercial use only.** The Software may not be used, in whole or in part, for any commercial purpose. "Commercial purpose" means any activity intended to generate revenue, profit, or commercial advantage, whether directly or indirectly.
+
+2. **Attribution.** All copies or substantial portions of the Software must include this copyright notice and license text.
+
+3. **Share-alike.** Any modified versions of the Software distributed for noncommercial purposes must be distributed under the same license terms.
+
+4. **No commercial sublicensing.** You may not sublicense the Software for commercial use.
+
+For commercial licensing inquiries, contact Mark Neyer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
