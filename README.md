@@ -19,7 +19,12 @@ Here are examples most people in tech recognize immediately:
 
 These problems aren't unique to software. They show up in organizations, in politics, in any context where groups of people try to think and act together. Technology is just where they're most visible — and most tractable.
 
+I am using Voluntas to build Voluntas. Checkout the [full text of my plans so far](https://github.com/neyer/intent/blob/master/voluntas_current.txt), or this screenshot of the web tool in action:
+
 ![example of web ui](https://i.imgur.com/m3p4Ho4.png)
+
+In addition to using Voluntas to build itself, I run a separate instance at home to track all the projects I juggle as a husband, father, son, brother, investor, writer, &c &c.
+
 ---
 
 ## The Idea
