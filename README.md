@@ -19,6 +19,7 @@ Here are examples most people in tech recognize immediately:
 
 These problems aren't unique to software. They show up in organizations, in politics, in any context where groups of people try to think and act together. Technology is just where they're most visible — and most tractable.
 
+![example of web ui](https://i.imgur.com/m3p4Ho4.png)
 ---
 
 ## The Idea
@@ -111,7 +112,7 @@ The client connects to the running server and allows you to submit intent ops an
 ./visualize.sh
 ```
 
-This generates a visual representation of the current intent DAG. Open `index.html` in a browser to explore the graph interactively.
+This generates a visual representation of the current intent DAG. Open `index.html` in a browser to explore the graph interactively. Allows for the execution of ops with low latency, exploration of the tree.
 
 ### Inspect a Protobuf File
 
@@ -127,7 +128,7 @@ This prints a human-readable version of any `.pb` state file in the repo. The in
 ./intent-mark.sh <intent-id>
 ```
 
-Appends a completion op to the stream for the given intent.
+Appends a completion op to the stream for the given intent. This is currently implemented by adding a 'do' field and then setting it to true.
 
 ---
 

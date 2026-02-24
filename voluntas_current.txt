@@ -1,0 +1,31 @@
+=== Enable cooperative cognition at arbitrary scale ===
+
+1001. Define Intent Protocol
+  1007. work out computational base layer concept
+  1010. bootstrap some initial type defintions
+  1013. make the runtime support function definition and invocation
+  1034. add concepts of users and stream authority
+1002. Implement Intent Runtime
+  1035. make 'types' act like constraints on additional op submission
+1003. Build Tooling to interact with Runtime
+  1005. Command line tool
+    1014. basic implementation with explicit commands
+    1017. allow the commands to be defined in the intent language itself
+      1019. make it so the 'do' command is implemented as a function that adds field and sets value
+  1006. Web interface
+    1029. ability for intent ops to define their css rendering styles on the stream
+    1037. view on the literal store with reference counts
+    1038. ability to see meta-intents
+  1018. worker bot
+  1020. write standard libraries for common paradigms
+    1021. basic task completion
+    1022. adding notes
+    1023. argumentation
+      1024. clarification
+      1025. example
+      1026. external reference
+      1027. noting a crux
+  1028. simple command line tools for sending ops to server
+1004. Write Documentation
+  1030. basic readme
+  1033. explanation of reasoning behind references and literal stores
