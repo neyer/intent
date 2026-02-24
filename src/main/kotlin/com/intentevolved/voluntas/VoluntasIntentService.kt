@@ -13,12 +13,15 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.time.Instant
 
+private data class BodyOpTemplate(val opTypeEntityId: Long, val participants: List<Long>)
+private data class FunctionDef(val name: String, val paramNames: List<String>, val bodyOps: MutableList<BodyOpTemplate> = mutableListOf())
+
 /**
  * IntentService implementation backed by Voluntas Relationships and Literals.
  *
  * All intent operations are translated into Relationships whose participants[0]
  * identifies the relationship type (DEFINES_TYPE, DEFINES_FIELD, INSTANTIATES,
- * SETS_FIELD, ADDS_PARTICIPANT).
+ * SETS_FIELD, ADDS_PARTICIPANT, DEFINES_FUNCTION, DEFINES_BODY_OP, INVOKES_FUNCTION).
  */
 class VoluntasIntentService private constructor(
 // Some relationship between existing intents.
@@ -85,6 +88,8 @@ class VoluntasIntentService private constructor(
     private val byId = mutableMapOf<Long, Intent>()
     private val childrenById = mutableMapOf<Long, MutableList<Long>>().withDefault { mutableListOf() }
     private var nextEntityId = VoluntasIds.FIRST_USER_ENTITY
+    private val functions = mutableMapOf<Long, FunctionDef>()
+    private var isReplaying = false
 
     // --- Bootstrap ---
 
@@ -157,6 +162,9 @@ class VoluntasIntentService private constructor(
             VoluntasIds.INSTANTIATES      -> handleInstantiates(rel, timestamp)
             VoluntasIds.SETS_FIELD        -> handleSetsField(rel, timestamp)
             VoluntasIds.ADDS_PARTICIPANT  -> handleAddsParticipant(rel, timestamp)
+            VoluntasIds.DEFINES_FUNCTION  -> handleDefinesFunction(rel)
+            VoluntasIds.DEFINES_BODY_OP   -> handleDefinesBodyOp(rel)
+            VoluntasIds.INVOKES_FUNCTION  -> handleInvokesFunction(rel, timestamp)
         }
     }
 
@@ -393,6 +401,91 @@ class VoluntasIntentService private constructor(
         trackEntityId(relId)
     }
 
+    private fun handleDefinesFunction(rel: Relationship) {
+        val id = rel.id.toLong()
+        val participants = rel.participantsList
+        val name = if (participants.size >= 2) literalStore.getString(participants[1]) ?: "func:$id" else "func:$id"
+        val paramNames = participants.drop(2).mapNotNull { literalStore.getString(it) }
+        functions[id] = FunctionDef(name, paramNames)
+        if (!byId.containsKey(id)) {
+            byId[id] = IntentImpl(
+                text = "Function:$name",
+                id = id,
+                stateProvider = this,
+                isMeta = true
+            )
+        }
+        trackEntityId(id)
+    }
+
+    private fun handleDefinesBodyOp(rel: Relationship) {
+        val id = rel.id.toLong()
+        val participants = rel.participantsList
+        if (participants.size < 3) return
+        val funcId = participants[1]
+        val opTypeEntityId = participants[2]
+        val templateParticipants = participants.drop(3)
+        functions[funcId]?.bodyOps?.add(BodyOpTemplate(opTypeEntityId, templateParticipants))
+        if (!byId.containsKey(id)) {
+            byId[id] = IntentImpl(
+                text = "BodyOp:$id of func:$funcId",
+                id = id,
+                participantIds = mutableListOf(funcId),
+                stateProvider = this,
+                isMeta = true
+            )
+        }
+        trackEntityId(id)
+    }
+
+    private fun handleInvokesFunction(rel: Relationship, timestamp: Long?) {
+        val id = rel.id.toLong()
+        val participants = rel.participantsList
+        if (participants.size < 2) return
+        val funcId = participants[1]
+        val args = participants.drop(2)
+        val funcDef = functions[funcId] ?: return
+        if (!byId.containsKey(id)) {
+            byId[id] = IntentImpl(
+                text = "Invoke:${funcDef.name}",
+                id = id,
+                stateProvider = this,
+                isMeta = true
+            )
+        }
+        trackEntityId(id)
+
+        // During replay the expanded ops are already in the stream and will be
+        // interpreted when encountered in order — do not re-expand here.
+        if (isReplaying) return
+
+        for (template in funcDef.bodyOps) {
+            val concreteParticipants = template.participants.map { pid ->
+                if (VoluntasIds.isLiteral(pid)) {
+                    val strVal = literalStore.getString(pid)
+                    // Parameter references are string literals of the form "$0" / "$1" (positional)
+                    // or "$intentId" (named). Try positional first; toIntOrNull() returns null for
+                    // non-numeric suffixes so "$cat" falls through cleanly to the name lookup.
+                    if (strVal != null && strVal.startsWith("$")) {
+                        val ref = strVal.drop(1)
+                        val index = ref.toIntOrNull()
+                        if (index != null && index < args.size) return@map args[index]
+                        val nameIndex = funcDef.paramNames.indexOf(ref)
+                        if (nameIndex >= 0) return@map args[nameIndex]
+                    }
+                }
+                pid
+            }
+            val newId = nextEntityId++
+            val newRel = Relationship.newBuilder()
+                .setId(newId)
+                .addParticipants(template.opTypeEntityId)
+                .addAllParticipants(concreteParticipants)
+                .build()
+            emitRelationship(newRel)
+        }
+    }
+
     // --- childrenById helpers ---
 
     private fun linkChild(parentId: Long, childId: Long) {
@@ -416,19 +509,23 @@ class VoluntasIntentService private constructor(
     // --- Replay ---
 
     private fun replayStream(stream: Stream) {
-        for (op in stream.opsList) {
-            when {
-                op.hasLiteral() -> {
-                    literalStore.register(op.literal)
-                    ops.add(op)
-                }
-                op.hasRelationship() -> {
-                    // Just re-add the op to our list and interpret
-                    ops.add(op)
-                    val ts = if (op.timestamp != 0L) op.timestamp else null
-                    interpretRelationship(op.relationship, ts)
+        isReplaying = true
+        try {
+            for (op in stream.opsList) {
+                when {
+                    op.hasLiteral() -> {
+                        literalStore.register(op.literal)
+                        ops.add(op)
+                    }
+                    op.hasRelationship() -> {
+                        ops.add(op)
+                        val ts = if (op.timestamp != 0L) op.timestamp else null
+                        interpretRelationship(op.relationship, ts)
+                    }
                 }
             }
+        } finally {
+            isReplaying = false
         }
     }
 
@@ -545,6 +642,94 @@ class VoluntasIntentService private constructor(
         }
 
         emitRelationship(builder.build())
+    }
+
+    /**
+     * Define a new function with the given parameter names.
+     * Returns the function entity ID.
+     */
+    fun defineFunction(name: String, paramNames: List<String> = emptyList()): Long {
+        val id = nextEntityId++
+        val nameLit = literalStore.getOrCreate(name)
+        val builder = Relationship.newBuilder()
+            .setId(id)
+            .addParticipants(VoluntasIds.DEFINES_FUNCTION)
+            .addParticipants(nameLit)
+        for (paramName in paramNames) {
+            builder.addParticipants(literalStore.getOrCreate(paramName))
+        }
+        emitRelationship(builder.build())
+        return id
+    }
+
+    /**
+     * Append one template op to a function's body.
+     *
+     * [opTypeEntityId] is the reserved relationship-type entity (e.g. DEFINES_FIELD, SETS_FIELD).
+     * [templateParticipants] are the remaining participants; use [paramRef] to embed substitution
+     * placeholders.
+     *
+     * Throws [IllegalArgumentException] if any template participant is a parameter reference
+     * (a string literal starting with "$") that doesn't match a declared parameter by position
+     * or by name.
+     */
+    fun addBodyOp(funcId: Long, opTypeEntityId: Long, templateParticipants: List<Long>): Long {
+        val funcDef = functions[funcId]
+            ?: throw IllegalArgumentException("No function with id $funcId")
+        for (pid in templateParticipants) {
+            if (VoluntasIds.isLiteral(pid)) {
+                val strVal = literalStore.getString(pid)
+                if (strVal != null && strVal.startsWith("$")) {
+                    val ref = strVal.drop(1)
+                    val validIndex = ref.toIntOrNull()?.let { it < funcDef.paramNames.size } == true
+                    val validName = funcDef.paramNames.contains(ref)
+                    if (!validIndex && !validName) {
+                        val paramList = if (funcDef.paramNames.isEmpty()) "none"
+                            else funcDef.paramNames.mapIndexed { i, n -> "\$$i or \$$n" }.joinToString(", ")
+                        throw IllegalArgumentException(
+                            "Body op references unknown parameter '$strVal' in function '${funcDef.name}'. " +
+                            "Valid parameters: $paramList"
+                        )
+                    }
+                }
+            }
+        }
+        val id = nextEntityId++
+        val builder = Relationship.newBuilder()
+            .setId(id)
+            .addParticipants(VoluntasIds.DEFINES_BODY_OP)
+            .addParticipants(funcId)
+            .addParticipants(opTypeEntityId)
+            .addAllParticipants(templateParticipants)
+        emitRelationship(builder.build())
+        return id
+    }
+
+    /**
+     * Returns the literal ID for the positional parameter-reference placeholder "$[index]".
+     * Use this when building [addBodyOp] template participant lists.
+     */
+    fun paramRef(index: Int): Long = literalStore.getOrCreate("\$$index")
+
+    /**
+     * Returns the literal ID for the named parameter-reference placeholder "$[name]".
+     * Use this when building [addBodyOp] template participant lists.
+     */
+    fun paramRef(name: String): Long = literalStore.getOrCreate("\$$name")
+
+    /**
+     * Invoke a function, expanding its body into concrete ops appended to the stream.
+     * [args] are entity or literal IDs supplied in parameter order.
+     */
+    fun invokeFunction(funcId: Long, args: List<Long> = emptyList()): Long {
+        val id = nextEntityId++
+        val builder = Relationship.newBuilder()
+            .setId(id)
+            .addParticipants(VoluntasIds.INVOKES_FUNCTION)
+            .addParticipants(funcId)
+            .addAllParticipants(args)
+        emitRelationship(builder.build())
+        return id
     }
 
     override fun getById(id: Long): Intent? = byId[id]

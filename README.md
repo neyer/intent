@@ -49,6 +49,8 @@ The structure of thought is represented as a collection of `Intent` nodes, each 
 
 Because relationships are first-class intents, collaborators can comment on, approve, question, or dispute any thought in the system — and those responses are themselves part of the structured record.
 
+Check out Runtime.md for details on how it's implemented.
+
 **A Protocol and a Language**
 
 Thinkers can propose and modify type definitions and functions within the system. This makes Voluntas both a **protocol** for communication and a **programming language with a runtime**. Where Lisp eliminates the distinction between code and data, Voluntas aims to eliminate the distinction between *development* and *runtime*. Thinking is itself a mixture of planning and execution.
