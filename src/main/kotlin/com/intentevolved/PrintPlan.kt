@@ -13,6 +13,11 @@ fun main(args: Array<String>) {
         val prefix = "  ".repeat(indent)
         println("$prefix${intent.id()}. ${intent.text()}")
 
+        val fieldPrefix = "$prefix    "
+        intent.fieldValues().forEach { (name, value) ->
+            println("$fieldPrefix$name: $value")
+        }
+
         val scope = service.getFocalScope(id)
         scope.children.filter { !it.isMeta() }.forEach { child ->
             printIntent(child.id(), indent + 1)
