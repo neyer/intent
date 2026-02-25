@@ -91,6 +91,9 @@
       1026. external reference
       1027. noting a crux
   1028. simple command line tools for sending ops to server
+  1136. tooling for working on voluntas
+    1137. git hook for regenerating text version of plan on commit
+        done: true
 1004. Write Documentation
   1030. basic readme
       done: true
