@@ -4,6 +4,7 @@ import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
 import voluntas.v1.AddField
 import voluntas.v1.FieldType
+import voluntas.v1.InvokeMacro
 import voluntas.v1.SubmitOpRequest
 import voluntas.v1.CreateIntent
 import voluntas.v1.SetFieldValue
@@ -34,7 +35,11 @@ class InputHandler(
     // it's the default parent for all new intents
     var focalIntent: Long = 0
 
-    private val executor = CommandExecutor(consumer, stateProvider, fileName)
+    val executor = CommandExecutor(consumer, stateProvider, fileName)
+
+    fun registerCommand(command: Command) {
+        executor.registerCommand(command)
+    }
 
     fun handleKeyStroke(key: KeyStroke): RedrawType {
 
@@ -417,11 +422,43 @@ class ImportCommand : Command("import") {
     }
 }
 
+/**
+ * Invokes a named macro defined in the Voluntas stream.
+ *
+ * The macro is expected to accept two parameters: textLit (the literal ID of the
+ * user-supplied text) and parentId (the current focal intent). The text and parent
+ * are sent to the server via the InvokeMacro payload; the server handles literal
+ * allocation and macro expansion.
+ */
+class DynamicMacroCommand(
+    keyword: String,
+    private val macroEntityId: Long,
+) : Command(keyword) {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
+        val request = SubmitOpRequest.newBuilder()
+            .setInvokeMacro(
+                InvokeMacro.newBuilder()
+                    .setMacroEntityId(macroEntityId)
+                    .setTextArg(args.ifEmpty { keyword })
+                    .setParentId(focalIntent)
+            )
+            .build()
+        return consumer.consume(request)
+    }
+}
+
 // Command registry and executor
 class CommandExecutor(
     private val consumer: IntentStreamConsumer,
-    private val stateProvider: IntentStateProvider, writeFileName: String?) {
-    private val commands = listOf(
+    private val stateProvider: IntentStateProvider,
+    writeFileName: String?
+) {
+    private val commands = mutableListOf<Command>(
         AddCommand(),
         FocusCommand(),
         UpdateCommand(),
@@ -431,6 +468,11 @@ class CommandExecutor(
         WriteCommand(),
         ImportCommand()
     )
+
+    /** Register a dynamic command (e.g. from a loaded module). */
+    fun registerCommand(command: Command) {
+        commands.add(command)
+    }
 
     fun execute(command: String, currentFocalIntent: Long): Pair<String, Long> {
         val matchedCommand = commands.firstOrNull { it.matches(command) }

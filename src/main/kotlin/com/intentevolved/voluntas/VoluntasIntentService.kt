@@ -13,8 +13,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.time.Instant
 
-private data class MacroBodyOp(val opTypeEntityId: Long, val participants: List<Long>)
-private data class MacroDef(val name: String, val paramNames: List<String>, val bodyOps: MutableList<MacroBodyOp> = mutableListOf())
+internal data class MacroBodyOp(val opTypeEntityId: Long, val participants: List<Long>)
+internal data class MacroDef(val name: String, val paramNames: List<String>, val bodyOps: MutableList<MacroBodyOp> = mutableListOf())
 
 /**
  * IntentService implementation backed by Voluntas Relationships and Literals.
@@ -90,6 +90,11 @@ class VoluntasIntentService private constructor(
     private var nextEntityId = VoluntasIds.FIRST_USER_ENTITY
     private val macros = mutableMapOf<Long, MacroDef>()
     private var isReplaying = false
+    // Types whose instances are visible (non-meta) intents with text — starts with STRING_INTENT_TYPE
+    // and grows as subtypes are declared via DEFINES_TYPE participants[2].
+    private val visibleTypes = mutableSetOf(VoluntasIds.STRING_INTENT_TYPE)
+    // All instances of each type, keyed by type entity ID.
+    private val instancesByType = mutableMapOf<Long, MutableList<Long>>()
 
     // --- Bootstrap ---
 
@@ -173,6 +178,12 @@ class VoluntasIntentService private constructor(
         val id = rel.id.toLong()
         val participants = rel.participantsList
         val moduleEntityId = if (participants.size >= 2) participants[1] else null
+        // participants[2], if present, is the parent type. If that parent is visible
+        // (i.e. produces non-meta intents), so are instances of this type.
+        val parentTypeId = if (participants.size >= 3) participants[2] else null
+        if (parentTypeId != null && parentTypeId in visibleTypes) {
+            visibleTypes.add(id)
+        }
 
         if (!byId.containsKey(id)) {
             byId[id] = IntentImpl(
@@ -239,8 +250,9 @@ class VoluntasIntentService private constructor(
         val typeId = if (participants.size >= 2) participants[1] else return
         val entityId = rel.id.toLong()
 
-        if (typeId == VoluntasIds.STRING_INTENT_TYPE) {
-            // This is a string intent instantiation
+        if (typeId in visibleTypes) {
+            // Visible type: create a non-meta intent with text from participants[2].
+            // Covers STRING_INTENT_TYPE and any declared subtypes (e.g. /standard/note).
             val textLitId = if (participants.size >= 3) participants[2] else null
             val parentEntityId = if (participants.size >= 4) participants[3] else null
             val text = if (textLitId != null) literalStore.getString(textLitId) ?: "" else ""
@@ -259,15 +271,22 @@ class VoluntasIntentService private constructor(
                 linkChild(parentEntityId, entityId)
             }
         } else {
-            // Generic instantiation → meta intent
+            // Generic instantiation → meta intent.
+            // participants[2], if present, is the parent entity to link under.
+            val parentEntityId = if (participants.size >= 3) participants[2] else null
             byId[entityId] = IntentImpl(
                 text = "Instance:${entityId} of type:${typeId}",
                 id = entityId,
+                participantIds = if (parentEntityId != null) mutableListOf(parentEntityId) else mutableListOf(),
                 stateProvider = this,
                 createdTimestamp = timestamp,
                 isMeta = true
             )
+            if (parentEntityId != null) {
+                linkChild(parentEntityId, entityId)
+            }
         }
+        instancesByType.getOrPut(typeId) { mutableListOf() }.add(entityId)
         trackEntityId(entityId)
     }
 
@@ -732,6 +751,55 @@ class VoluntasIntentService private constructor(
         return id
     }
 
+    /**
+     * Instantiate any type, including non-visible (meta) types.
+     * [parentId] links the instance as a child of that entity.
+     * For visible types (e.g. STRING_INTENT_TYPE subtypes) use [addIntent] instead,
+     * which also handles the text literal.
+     */
+    fun instantiateType(typeId: Long, parentId: Long? = null): Long {
+        val id = nextEntityId++
+        val builder = Relationship.newBuilder()
+            .setId(id)
+            .addParticipants(VoluntasIds.INSTANTIATES)
+            .addParticipants(typeId)
+        if (parentId != null) {
+            builder.addParticipants(parentId)
+        }
+        emitRelationship(builder.build())
+        return id
+    }
+
+    /**
+     * Returns all entity IDs that are instances of [typeId].
+     */
+    fun getInstancesOfType(typeId: Long): List<Long> =
+        instancesByType[typeId]?.toList() ?: emptyList()
+
+    /**
+     * Finds a macro by name, returning its entity ID and definition, or null if not found.
+     */
+    internal fun getMacroByName(name: String): Pair<Long, MacroDef>? =
+        macros.entries.find { it.value.name == name }?.let { it.key to it.value }
+
+    /**
+     * Scans all instances of the "/standard/interface/command" type and returns a list of
+     * (commandName, macroEntityId) pairs. The macro entity ID is the parent of each annotation
+     * instance. Returns empty list if the standard module has not been loaded.
+     */
+    fun getCommandAnnotations(): List<Pair<String, Long>> {
+        val commandType = byId.values.find { it.text() == "/standard/interface/command" }
+            ?: return emptyList()
+        return getInstancesOfType(commandType.id()).mapNotNull { instanceId ->
+            val instance = byId[instanceId] as? IntentImpl ?: return@mapNotNull null
+            val commandName = instance.fieldValues()["command-name"] as? String
+                ?: return@mapNotNull null
+            val macroEntityId = instance.participantIds.firstOrNull()
+                ?: return@mapNotNull null
+            commandName to macroEntityId
+        }
+    }
+
     override fun getById(id: Long): Intent? = byId[id]
 
     override fun getFocalScope(id: Long): FocalScope {
@@ -764,16 +832,25 @@ class VoluntasIntentService private constructor(
 
     /**
      * Define a new type entity, optionally linked to a module entity.
+     * [parentTypeId] declares this type as a subtype of an existing type. If the parent
+     * is a visible type (e.g. STRING_INTENT_TYPE), instances of the new type will also
+     * be visible non-meta intents. Requires [moduleEntityId] when [parentTypeId] is set.
      * Emits DEFINES_TYPE and SETS_FIELD for the type name.
      * Returns the new type entity ID.
      */
-    fun defineType(name: String, moduleEntityId: Long? = null): Long {
+    fun defineType(name: String, moduleEntityId: Long? = null, parentTypeId: Long? = null): Long {
+        require(parentTypeId == null || moduleEntityId != null) {
+            "moduleEntityId is required when parentTypeId is specified"
+        }
         val id = nextEntityId++
         val builder = Relationship.newBuilder()
             .setId(id)
             .addParticipants(VoluntasIds.DEFINES_TYPE)
         if (moduleEntityId != null) {
             builder.addParticipants(moduleEntityId)
+        }
+        if (parentTypeId != null) {
+            builder.addParticipants(parentTypeId)
         }
         emitRelationship(builder.build())
         edit(id, name)
@@ -834,7 +911,13 @@ class VoluntasIntentService private constructor(
                 setFieldValue(sfv.intentId, sfv.fieldName, value)
                 CommandResult("set field '${sfv.fieldName}' on intent ${sfv.intentId}")
             }
-            SubmitOpRequest.PayloadCase.PAYLOAD_NOT_SET ->
+            SubmitOpRequest.PayloadCase.INVOKE_MACRO -> {
+                val im = request.invokeMacro
+                val textLitId = literalStore.getOrCreate(im.textArg)
+                invokeMacro(im.macroEntityId, listOf(textLitId, im.parentId))
+                CommandResult("invoked macro ${im.macroEntityId}")
+            }
+            SubmitOpRequest.PayloadCase.PAYLOAD_NOT_SET, null ->
                 throw IllegalArgumentException("Request has no payload")
         }
     }

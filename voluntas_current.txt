@@ -31,28 +31,52 @@
     1017. allow the commands to be defined in the intent language itself
       1019. make it so the 'do' command is implemented as a function that adds field and sets value
       1063. build standard library module and command interface
+          done: true
         1064. write GenerateStandardModule.kt that produces modules/standard.pb
+            done: true
           1070. define /standard/note type as a STRING_INTENT_TYPE subtype so its instances are visible non-meta intents with text
+              done: true
           1071. define add-note macro with params [textLit, parentId]: body is one INSTANTIATES op for /standard/note with $textLit at participants[2] and $parentId at participants[3]
+              done: true
           1072. define /standard/interface/command type with a command-name STRING field
+              done: true
           1073. instantiate /standard/interface/command as a child of the add-note macro entity, set command-name field to note
+              done: true
         1065. extend handleInstantiates to support visible string-subtype custom types
+            done: true
           1074. allow DEFINES_TYPE to declare a parent type via participants[2] (e.g. STRING_INTENT_TYPE) to mark instances as visible
+              done: true
           1075. track set of visible types in VoluntasIntentService (initially just STRING_INTENT_TYPE; expanded when DEFINES_TYPE names STRING_INTENT_TYPE as parent)
+              done: true
           1076. in handleInstantiates, check if typeId is in visibleTypes and if so create non-meta intent with text from participants[2], parent from participants[3]
+              done: true
           1077. update defineType() helper to accept optional parentTypeId and emit it as participants[2] of the DEFINES_TYPE relationship
+              done: true
         1066. verify ModuleLoader correctly remaps DEFINES_MACRO and DEFINES_MACRO_OP ops
+            done: true
         1067. expose loaded macros and command annotations from VoluntasIntentService
+            done: true
           1078. add getMacroByName(name: String) to VoluntasIntentService returning MacroDef and its entity ID
+              done: true
           1079. add getCommandAnnotations() returning list of (commandName, macroEntityId) by scanning instances of /standard/interface/command type
+              done: true
           1080. track which type entity corresponds to /standard/interface/command by name lookup after module load
+              done: true
         1068. add DynamicMacroCommand to CommandExecutor that invokes a named macro
+            done: true
           1081. DynamicMacroCommand holds command keyword and macroEntityId; on process() converts text arg to literal ID then calls service.invokeMacro(macroEntityId, listOf(textLitId, focalIntent))
+              done: true
           1082. CommandExecutor needs a reference to VoluntasIntentService (not just IntentStreamConsumer) so it can call invokeMacro and literalStore.getOrCreate
+              done: true
           1083. add registerCommand(keyword, macroEntityId) on CommandExecutor so dynamic commands can be added after module load
+              done: true
         1069. load standard.pb in VoluntasRuntime and register dynamic commands from /standard/interface/command instances
+            done: true
           1084. after loadModules() in VoluntasRuntime, call service.getCommandAnnotations() and register a DynamicMacroCommand for each result
+              done: true
           1085. standard.pb is always loaded first so its types are available for the main stream and any other modules
+              done: true
+      1135. this is the first note
   1006. Web interface
     1029. ability for intent ops to define their css rendering styles on the stream
     1037. view on the literal store with reference counts
@@ -71,3 +95,4 @@
   1030. basic readme
       done: true
   1033. explanation of reasoning behind references and literal stores
+1124. /standard

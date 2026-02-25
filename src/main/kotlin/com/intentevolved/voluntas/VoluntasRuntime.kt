@@ -184,6 +184,20 @@ class VoluntasIntentServiceGrpcImpl(
         }
     }
 
+    override suspend fun getCommands(request: GetCommandsRequest): GetCommandsResponse {
+        return withContext(stateDispatcher) {
+            val annotations = service.getCommandAnnotations()
+            GetCommandsResponse.newBuilder()
+                .addAllCommands(annotations.map { (keyword, macroEntityId) ->
+                    CommandInfo.newBuilder()
+                        .setKeyword(keyword)
+                        .setMacroEntityId(macroEntityId)
+                        .build()
+                })
+                .build()
+        }
+    }
+
     override suspend fun getFocalScope(request: GetFocalScopeRequest): GetFocalScopeResponse {
         return withContext(stateDispatcher) {
             try {

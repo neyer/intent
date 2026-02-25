@@ -207,6 +207,26 @@ service IntentService {
   rpc SubmitOp(SubmitOpRequest) returns (SubmitOpResponse);
   rpc GetIntent(GetIntentRequest) returns (GetIntentResponse);
   rpc GetFocalScope(GetFocalScopeRequest) returns (GetFocalScopeResponse);
+  rpc GetCommands(GetCommandsRequest) returns (GetCommandsResponse);
+}
+
+message GetCommandsRequest {}
+
+message CommandInfo {
+  string keyword = 1;
+  int64 macro_entity_id = 2;
+}
+
+message GetCommandsResponse {
+  repeated CommandInfo commands = 1;
+}
+
+message InvokeMacro {
+  int64 macro_entity_id = 1;
+  // The text argument; the server creates or looks up the literal ID.
+  string text_arg = 2;
+  // The parent intent entity ID passed as the second macro argument.
+  int64 parent_id = 3;
 }
 
 message SubmitOpRequest {
@@ -216,6 +236,7 @@ message SubmitOpRequest {
     UpdateIntentParent update_intent_parent = 3;
     AddField add_field = 4;
     SetFieldValue set_field_value = 5;
+    InvokeMacro invoke_macro = 6;
   }
 }
 

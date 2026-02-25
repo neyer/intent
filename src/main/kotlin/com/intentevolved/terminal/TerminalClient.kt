@@ -44,6 +44,16 @@ fun runTerminal(client: IntentGrpcClient) {
 
     val handler = InputHandler(client, client)
 
+    // Register any macro-backed commands the server knows about (from loaded modules).
+    try {
+        val commands = client.getCommands()
+        for (cmd in commands) {
+            handler.registerCommand(DynamicMacroCommand(cmd.keyword, cmd.macroEntityId))
+        }
+    } catch (e: Exception) {
+        // Non-fatal: server may not have any dynamic commands or module not loaded.
+    }
+
     // Initial full screen draw
     drawFullScreen(screen, handler, client)
     screen.refresh()
@@ -160,6 +170,12 @@ class IntentGrpcClient(
         } else {
             null
         }
+    }
+
+    fun getCommands(): List<CommandInfo> {
+        val request = GetCommandsRequest.newBuilder().build()
+        val response = stub.getCommands(request)
+        return response.commandsList
     }
 
     override fun getFocalScope(id: Long): FocalScope {
