@@ -13,15 +13,15 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.time.Instant
 
-private data class BodyOpTemplate(val opTypeEntityId: Long, val participants: List<Long>)
-private data class FunctionDef(val name: String, val paramNames: List<String>, val bodyOps: MutableList<BodyOpTemplate> = mutableListOf())
+private data class MacroBodyOp(val opTypeEntityId: Long, val participants: List<Long>)
+private data class MacroDef(val name: String, val paramNames: List<String>, val bodyOps: MutableList<MacroBodyOp> = mutableListOf())
 
 /**
  * IntentService implementation backed by Voluntas Relationships and Literals.
  *
  * All intent operations are translated into Relationships whose participants[0]
  * identifies the relationship type (DEFINES_TYPE, DEFINES_FIELD, INSTANTIATES,
- * SETS_FIELD, ADDS_PARTICIPANT, DEFINES_FUNCTION, DEFINES_BODY_OP, INVOKES_FUNCTION).
+ * SETS_FIELD, ADDS_PARTICIPANT, DEFINES_MACRO, DEFINES_MACRO_OP, INVOKES_MACRO).
  */
 class VoluntasIntentService private constructor(
 // Some relationship between existing intents.
@@ -88,7 +88,7 @@ class VoluntasIntentService private constructor(
     private val byId = mutableMapOf<Long, Intent>()
     private val childrenById = mutableMapOf<Long, MutableList<Long>>().withDefault { mutableListOf() }
     private var nextEntityId = VoluntasIds.FIRST_USER_ENTITY
-    private val functions = mutableMapOf<Long, FunctionDef>()
+    private val macros = mutableMapOf<Long, MacroDef>()
     private var isReplaying = false
 
     // --- Bootstrap ---
@@ -162,9 +162,9 @@ class VoluntasIntentService private constructor(
             VoluntasIds.INSTANTIATES      -> handleInstantiates(rel, timestamp)
             VoluntasIds.SETS_FIELD        -> handleSetsField(rel, timestamp)
             VoluntasIds.ADDS_PARTICIPANT  -> handleAddsParticipant(rel, timestamp)
-            VoluntasIds.DEFINES_FUNCTION  -> handleDefinesFunction(rel)
-            VoluntasIds.DEFINES_BODY_OP   -> handleDefinesBodyOp(rel)
-            VoluntasIds.INVOKES_FUNCTION  -> handleInvokesFunction(rel, timestamp)
+            VoluntasIds.DEFINES_MACRO     -> handleDefinesMacro(rel)
+            VoluntasIds.DEFINES_MACRO_OP  -> handleDefinesMacroOp(rel)
+            VoluntasIds.INVOKES_MACRO     -> handleInvokesMacro(rel, timestamp)
         }
     }
 
@@ -401,15 +401,15 @@ class VoluntasIntentService private constructor(
         trackEntityId(relId)
     }
 
-    private fun handleDefinesFunction(rel: Relationship) {
+    private fun handleDefinesMacro(rel: Relationship) {
         val id = rel.id.toLong()
         val participants = rel.participantsList
-        val name = if (participants.size >= 2) literalStore.getString(participants[1]) ?: "func:$id" else "func:$id"
+        val name = if (participants.size >= 2) literalStore.getString(participants[1]) ?: "macro:$id" else "macro:$id"
         val paramNames = participants.drop(2).mapNotNull { literalStore.getString(it) }
-        functions[id] = FunctionDef(name, paramNames)
+        macros[id] = MacroDef(name, paramNames)
         if (!byId.containsKey(id)) {
             byId[id] = IntentImpl(
-                text = "Function:$name",
+                text = "Macro:$name",
                 id = id,
                 stateProvider = this,
                 isMeta = true
@@ -418,19 +418,19 @@ class VoluntasIntentService private constructor(
         trackEntityId(id)
     }
 
-    private fun handleDefinesBodyOp(rel: Relationship) {
+    private fun handleDefinesMacroOp(rel: Relationship) {
         val id = rel.id.toLong()
         val participants = rel.participantsList
         if (participants.size < 3) return
-        val funcId = participants[1]
+        val macroId = participants[1]
         val opTypeEntityId = participants[2]
         val templateParticipants = participants.drop(3)
-        functions[funcId]?.bodyOps?.add(BodyOpTemplate(opTypeEntityId, templateParticipants))
+        macros[macroId]?.bodyOps?.add(MacroBodyOp(opTypeEntityId, templateParticipants))
         if (!byId.containsKey(id)) {
             byId[id] = IntentImpl(
-                text = "BodyOp:$id of func:$funcId",
+                text = "MacroOp:$id of macro:$macroId",
                 id = id,
-                participantIds = mutableListOf(funcId),
+                participantIds = mutableListOf(macroId),
                 stateProvider = this,
                 isMeta = true
             )
@@ -438,16 +438,16 @@ class VoluntasIntentService private constructor(
         trackEntityId(id)
     }
 
-    private fun handleInvokesFunction(rel: Relationship, timestamp: Long?) {
+    private fun handleInvokesMacro(rel: Relationship, timestamp: Long?) {
         val id = rel.id.toLong()
         val participants = rel.participantsList
         if (participants.size < 2) return
-        val funcId = participants[1]
+        val macroId = participants[1]
         val args = participants.drop(2)
-        val funcDef = functions[funcId] ?: return
+        val macroDef = macros[macroId] ?: return
         if (!byId.containsKey(id)) {
             byId[id] = IntentImpl(
-                text = "Invoke:${funcDef.name}",
+                text = "Invoke:${macroDef.name}",
                 id = id,
                 stateProvider = this,
                 isMeta = true
@@ -459,7 +459,7 @@ class VoluntasIntentService private constructor(
         // interpreted when encountered in order — do not re-expand here.
         if (isReplaying) return
 
-        for (template in funcDef.bodyOps) {
+        for (template in macroDef.bodyOps) {
             val concreteParticipants = template.participants.map { pid ->
                 if (VoluntasIds.isLiteral(pid)) {
                     val strVal = literalStore.getString(pid)
@@ -470,7 +470,7 @@ class VoluntasIntentService private constructor(
                         val ref = strVal.drop(1)
                         val index = ref.toIntOrNull()
                         if (index != null && index < args.size) return@map args[index]
-                        val nameIndex = funcDef.paramNames.indexOf(ref)
+                        val nameIndex = macroDef.paramNames.indexOf(ref)
                         if (nameIndex >= 0) return@map args[nameIndex]
                     }
                 }
@@ -645,15 +645,15 @@ class VoluntasIntentService private constructor(
     }
 
     /**
-     * Define a new function with the given parameter names.
-     * Returns the function entity ID.
+     * Define a new macro with the given parameter names.
+     * Returns the macro entity ID.
      */
-    fun defineFunction(name: String, paramNames: List<String> = emptyList()): Long {
+    fun defineMacro(name: String, paramNames: List<String> = emptyList()): Long {
         val id = nextEntityId++
         val nameLit = literalStore.getOrCreate(name)
         val builder = Relationship.newBuilder()
             .setId(id)
-            .addParticipants(VoluntasIds.DEFINES_FUNCTION)
+            .addParticipants(VoluntasIds.DEFINES_MACRO)
             .addParticipants(nameLit)
         for (paramName in paramNames) {
             builder.addParticipants(literalStore.getOrCreate(paramName))
@@ -663,7 +663,7 @@ class VoluntasIntentService private constructor(
     }
 
     /**
-     * Append one template op to a function's body.
+     * Append one template op to a macro's body.
      *
      * [opTypeEntityId] is the reserved relationship-type entity (e.g. DEFINES_FIELD, SETS_FIELD).
      * [templateParticipants] are the remaining participants; use [paramRef] to embed substitution
@@ -673,21 +673,21 @@ class VoluntasIntentService private constructor(
      * (a string literal starting with "$") that doesn't match a declared parameter by position
      * or by name.
      */
-    fun addBodyOp(funcId: Long, opTypeEntityId: Long, templateParticipants: List<Long>): Long {
-        val funcDef = functions[funcId]
-            ?: throw IllegalArgumentException("No function with id $funcId")
+    fun addMacroOp(macroId: Long, opTypeEntityId: Long, templateParticipants: List<Long>): Long {
+        val macroDef = macros[macroId]
+            ?: throw IllegalArgumentException("No macro with id $macroId")
         for (pid in templateParticipants) {
             if (VoluntasIds.isLiteral(pid)) {
                 val strVal = literalStore.getString(pid)
                 if (strVal != null && strVal.startsWith("$")) {
                     val ref = strVal.drop(1)
-                    val validIndex = ref.toIntOrNull()?.let { it < funcDef.paramNames.size } == true
-                    val validName = funcDef.paramNames.contains(ref)
+                    val validIndex = ref.toIntOrNull()?.let { it < macroDef.paramNames.size } == true
+                    val validName = macroDef.paramNames.contains(ref)
                     if (!validIndex && !validName) {
-                        val paramList = if (funcDef.paramNames.isEmpty()) "none"
-                            else funcDef.paramNames.mapIndexed { i, n -> "\$$i or \$$n" }.joinToString(", ")
+                        val paramList = if (macroDef.paramNames.isEmpty()) "none"
+                            else macroDef.paramNames.mapIndexed { i, n -> "\$$i or \$$n" }.joinToString(", ")
                         throw IllegalArgumentException(
-                            "Body op references unknown parameter '$strVal' in function '${funcDef.name}'. " +
+                            "Macro op references unknown parameter '$strVal' in macro '${macroDef.name}'. " +
                             "Valid parameters: $paramList"
                         )
                     }
@@ -697,8 +697,8 @@ class VoluntasIntentService private constructor(
         val id = nextEntityId++
         val builder = Relationship.newBuilder()
             .setId(id)
-            .addParticipants(VoluntasIds.DEFINES_BODY_OP)
-            .addParticipants(funcId)
+            .addParticipants(VoluntasIds.DEFINES_MACRO_OP)
+            .addParticipants(macroId)
             .addParticipants(opTypeEntityId)
             .addAllParticipants(templateParticipants)
         emitRelationship(builder.build())
@@ -707,26 +707,26 @@ class VoluntasIntentService private constructor(
 
     /**
      * Returns the literal ID for the positional parameter-reference placeholder "$[index]".
-     * Use this when building [addBodyOp] template participant lists.
+     * Use this when building [addMacroOp] template participant lists.
      */
     fun paramRef(index: Int): Long = literalStore.getOrCreate("\$$index")
 
     /**
      * Returns the literal ID for the named parameter-reference placeholder "$[name]".
-     * Use this when building [addBodyOp] template participant lists.
+     * Use this when building [addMacroOp] template participant lists.
      */
     fun paramRef(name: String): Long = literalStore.getOrCreate("\$$name")
 
     /**
-     * Invoke a function, expanding its body into concrete ops appended to the stream.
+     * Invoke a macro, expanding its body into concrete ops appended to the stream.
      * [args] are entity or literal IDs supplied in parameter order.
      */
-    fun invokeFunction(funcId: Long, args: List<Long> = emptyList()): Long {
+    fun invokeMacro(macroId: Long, args: List<Long> = emptyList()): Long {
         val id = nextEntityId++
         val builder = Relationship.newBuilder()
             .setId(id)
-            .addParticipants(VoluntasIds.INVOKES_FUNCTION)
-            .addParticipants(funcId)
+            .addParticipants(VoluntasIds.INVOKES_MACRO)
+            .addParticipants(macroId)
             .addAllParticipants(args)
         emitRelationship(builder.build())
         return id

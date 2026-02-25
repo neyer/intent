@@ -90,11 +90,11 @@ the runtime recognises them by their fixed ID.
 | 3   | `INSTANTIATES`      | Creates an instance of a type                   |
 | 4   | `SETS_FIELD`        | Sets a field value on an entity                 |
 | 5   | `ADDS_PARTICIPANT`  | Adds a participant to an entity                 |
-| 6   | `DEFINES_FUNCTION`  | Declares a named, parameterised function        |
+| 6   | `DEFINES_MACRO`     | Declares a named, parameterised macro           |
 | 7   | `STRING_INTENT_TYPE`| The built-in "string intent" type               |
 | 8   | *(text field def)*  | The `text` field on STRING_INTENT_TYPE          |
-| 9   | `DEFINES_BODY_OP`   | Appends a template op to a function's body      |
-| 10  | `INVOKES_FUNCTION`  | Invokes a function, expanding its body          |
+| 9   | `DEFINES_MACRO_OP`  | Appends a template op to a macro's body         |
+| 10  | `INVOKES_MACRO`     | Invokes a macro, expanding its body             |
 
 User entities are allocated starting at ID **1000**.
 
@@ -151,36 +151,36 @@ Relationship(id=relId, participants=[ADDS_PARTICIPANT, targetId, participantId, 
 Appends (or inserts at `indexLit`) a new participant to `targetId`'s participant
 list, also linking `targetId` as a child of `participantId` in the tree.
 
-### DEFINES_FUNCTION (6)
+### DEFINES_MACRO (6)
 
 ```
-Relationship(id=funcId, participants=[DEFINES_FUNCTION, nameLit, param0Lit, param1Lit, ...])
+Relationship(id=macroId, participants=[DEFINES_MACRO, nameLit, param0Lit, param1Lit, ...])
 ```
 
-Declares `funcId` as a function entity. `nameLit` is the string name of the
-function. The remaining participants are string literals naming each parameter in
+Declares `macroId` as a macro entity. `nameLit` is the string name of the
+macro. The remaining participants are string literals naming each parameter in
 order. The body is empty at this point; body ops are attached with
-`DEFINES_BODY_OP`.
+`DEFINES_MACRO_OP`.
 
-### DEFINES_BODY_OP (9)
+### DEFINES_MACRO_OP (9)
 
 ```
-Relationship(id=bodyOpId, participants=[DEFINES_BODY_OP, funcId, opTypeEntityId, p0, p1, ...])
+Relationship(id=macroOpId, participants=[DEFINES_MACRO_OP, macroId, opTypeEntityId, p0, p1, ...])
 ```
 
-Appends one template step to the body of `funcId`. `opTypeEntityId` is the
-reserved entity for the relationship type to emit when the function is invoked
+Appends one template step to the body of `macroId`. `opTypeEntityId` is the
+reserved entity for the relationship type to emit when the macro is invoked
 (e.g. `DEFINES_FIELD` = 2, `SETS_FIELD` = 4). `p0`, `p1`, ... are the template
 participants, which may be concrete entity/literal IDs or **parameter reference**
 literals (see below). Body ops accumulate in the order they appear in the stream.
 
-### INVOKES_FUNCTION (10)
+### INVOKES_MACRO (10)
 
 ```
-Relationship(id=invocationId, participants=[INVOKES_FUNCTION, funcId, arg0, arg1, ...])
+Relationship(id=invocationId, participants=[INVOKES_MACRO, macroId, arg0, arg1, ...])
 ```
 
-Invokes `funcId` with the supplied arguments. The runtime expands the function
+Invokes `macroId` with the supplied arguments. The runtime expands the macro
 body: for each body op template, it allocates a fresh entity ID, substitutes
 parameter references with the corresponding arguments, and emits the resulting
 concrete relationship into the stream. Each emitted op is then immediately
@@ -200,18 +200,18 @@ by either a zero-based integer index or the declared parameter name.
 | Positional  | `$0`, `$1`   | The argument at that index               |
 | Named       | `$intentId`  | The argument for the parameter with that name |
 
-Both forms are equivalent and can be mixed within the same function body.
+Both forms are equivalent and can be mixed within the same macro body.
 `$0` and `$intentId` refer to the same argument if `intentId` is the first
 declared parameter.
 
-During invocation, `handleInvokesFunction` inspects each template participant.
+During invocation, `handleInvokesMacro` inspects each template participant.
 If it is a literal starting with `$`, the runtime first tries to parse the
 suffix as an integer (positional). If that fails — e.g. `$intentId` —
 `toIntOrNull()` returns null and the runtime falls through to a name lookup
-against the function's declared parameter list. Concrete participants (entity
+against the macro's declared parameter list. Concrete participants (entity
 IDs or non-`$` literals) pass through unchanged.
 
-`VoluntasIntentService` provides two `paramRef` helpers for building body op
+`VoluntasIntentService` provides two `paramRef` helpers for building macro op
 participant lists:
 
 ```kotlin
@@ -219,8 +219,8 @@ service.paramRef(0)          // positional: returns literal ID for "$0"
 service.paramRef("intentId") // named: returns literal ID for "$intentId"
 ```
 
-If a body op template contains a `$`-prefixed literal that does not match any
-declared parameter by index or name, `addBodyOp` throws `IllegalArgumentException`
+If a macro op template contains a `$`-prefixed literal that does not match any
+declared parameter by index or name, `addMacroOp` throws `IllegalArgumentException`
 at definition time.
 
 ---
@@ -253,7 +253,7 @@ On startup, the runtime calls `replayStream()`, which processes every op in orde
    on `participants[0]` to one of the handlers above.
 
 The `isReplaying` flag is set to `true` for the duration of replay. The
-`INVOKES_FUNCTION` handler checks this flag and skips expansion during replay,
+`INVOKES_MACRO` handler checks this flag and skips expansion during replay,
 because the expanded ops are already present in the stream ahead of it.
 
 The result is a consistent in-memory map of entities (`byId`) and their child
@@ -263,58 +263,58 @@ point.
 
 ---
 
-## Function Definition and Invocation
+## Macro Definition and Invocation
 
-Functions allow a sequence of ops to be named, parameterised, and reused.
+Macros allow a sequence of ops to be named, parameterised, and reused.
 
-**The key invariant: invoking a function has exactly one observable effect —
+**The key invariant: invoking a macro has exactly one observable effect —
 additional ops are appended to the stream.** There are no other side effects. The
 newly appended ops are themselves interpreted by the normal relationship handlers,
-so functions compose with the rest of the system for free.
+so macros compose with the rest of the system for free.
 
-### Defining a function
+### Defining a macro
 
 ```kotlin
-val funcId = service.defineFunction("do", listOf("intentId"))
+val macroId = service.defineMacro("do", listOf("intentId"))
 
-// Body op 0: DEFINES_FIELD $intentId "done" "BOOL"  (named ref)
-service.addBodyOp(funcId, VoluntasIds.DEFINES_FIELD,
+// Macro op 0: DEFINES_FIELD $intentId "done" "BOOL"  (named ref)
+service.addMacroOp(macroId, VoluntasIds.DEFINES_FIELD,
     listOf(service.paramRef("intentId"),
            service.literalStore.getOrCreate("done"),
            service.literalStore.getOrCreate("BOOL")))
 
-// Body op 1: SETS_FIELD $0 "done" true  (positional ref — same parameter)
-service.addBodyOp(funcId, VoluntasIds.SETS_FIELD,
+// Macro op 1: SETS_FIELD $0 "done" true  (positional ref — same parameter)
+service.addMacroOp(macroId, VoluntasIds.SETS_FIELD,
     listOf(service.paramRef(0),
            service.literalStore.getOrCreate("done"),
            service.literalStore.getOrCreate(true)))
 ```
 
-### Invoking a function
+### Invoking a macro
 
 ```kotlin
-service.invokeFunction(funcId, listOf(targetIntentId))
+service.invokeMacro(macroId, listOf(targetIntentId))
 ```
 
-This emits an `INVOKES_FUNCTION` relationship into the stream. The runtime then
+This emits an `INVOKES_MACRO` relationship into the stream. The runtime then
 expands the body, substituting `$0` with `targetIntentId`, and emits two concrete
 relationships: a `DEFINES_FIELD` and a `SETS_FIELD`. Those are interpreted
 immediately, adding the `done` field and setting it to `true` on the target
 intent.
 
-### Limitations: no recursive functions
+### Limitations: no recursive macros
 
-The current implementation does not support arbitrary recursive function calls.
+The current implementation does not support arbitrary recursive macro calls.
 There are two reasons:
 
-1. **No conditional / base case.** The function body is a flat, unconditional list
+1. **No conditional / base case.** The macro body is a flat, unconditional list
    of template ops. There is no branching primitive, so there is no way to express
-   "stop recursing when a condition holds." A function that invokes itself would
+   "stop recursing when a condition holds." A macro that invokes itself would
    expand indefinitely.
 
 2. **Eager, synchronous expansion.** Expansion happens inline inside
-   `handleInvokesFunction`. A body op whose `opTypeEntityId` is
-   `INVOKES_FUNCTION` would immediately re-enter the handler, consuming JVM stack
+   `handleInvokesMacro`. A macro op whose `opTypeEntityId` is
+   `INVOKES_MACRO` would immediately re-enter the handler, consuming JVM stack
    rather than just appending to the stream.
 
 Support for recursion may be added in the future. It would require at minimum a

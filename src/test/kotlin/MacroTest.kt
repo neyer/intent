@@ -4,9 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
-class FunctionTest {
+class MacroTest {
 
-    private fun freshService() = VoluntasIntentService.new("Function Test Root")
+    private fun freshService() = VoluntasIntentService.new("Macro Test Root")
 
     // --- Successful invocation ---
 
@@ -15,19 +15,19 @@ class FunctionTest {
         val service = freshService()
         val intent = service.addIntent("target intent", 0L)
 
-        val funcId = service.defineFunction("do", listOf("intentId"))
-        service.addBodyOp(funcId, VoluntasIds.DEFINES_FIELD, listOf(
+        val macroId = service.defineMacro("do", listOf("intentId"))
+        service.addMacroOp(macroId, VoluntasIds.DEFINES_FIELD, listOf(
             service.paramRef(0),
             service.literalStore.getOrCreate("done"),
             service.literalStore.getOrCreate("BOOL")
         ))
-        service.addBodyOp(funcId, VoluntasIds.SETS_FIELD, listOf(
+        service.addMacroOp(macroId, VoluntasIds.SETS_FIELD, listOf(
             service.paramRef(0),
             service.literalStore.getOrCreate("done"),
             service.literalStore.getOrCreate(true)
         ))
 
-        service.invokeFunction(funcId, listOf(intent.id()))
+        service.invokeMacro(macroId, listOf(intent.id()))
 
         assertEquals(true, service.getById(intent.id())!!.fieldValues()["done"])
     }
@@ -37,42 +37,42 @@ class FunctionTest {
         val service = freshService()
         val intent = service.addIntent("target intent", 0L)
 
-        val funcId = service.defineFunction("do", listOf("intentId"))
-        service.addBodyOp(funcId, VoluntasIds.DEFINES_FIELD, listOf(
+        val macroId = service.defineMacro("do", listOf("intentId"))
+        service.addMacroOp(macroId, VoluntasIds.DEFINES_FIELD, listOf(
             service.paramRef("intentId"),
             service.literalStore.getOrCreate("done"),
             service.literalStore.getOrCreate("BOOL")
         ))
-        service.addBodyOp(funcId, VoluntasIds.SETS_FIELD, listOf(
+        service.addMacroOp(macroId, VoluntasIds.SETS_FIELD, listOf(
             service.paramRef("intentId"),
             service.literalStore.getOrCreate("done"),
             service.literalStore.getOrCreate(true)
         ))
 
-        service.invokeFunction(funcId, listOf(intent.id()))
+        service.invokeMacro(macroId, listOf(intent.id()))
 
         assertEquals(true, service.getById(intent.id())!!.fieldValues()["done"])
     }
 
     @Test
-    fun `positional and named refs are interchangeable within the same function`() {
+    fun `positional and named refs are interchangeable within the same macro`() {
         val service = freshService()
         val intent = service.addIntent("target intent", 0L)
 
-        val funcId = service.defineFunction("do", listOf("intentId"))
+        val macroId = service.defineMacro("do", listOf("intentId"))
         // Define the field using named ref, set it using positional ref
-        service.addBodyOp(funcId, VoluntasIds.DEFINES_FIELD, listOf(
+        service.addMacroOp(macroId, VoluntasIds.DEFINES_FIELD, listOf(
             service.paramRef("intentId"),
             service.literalStore.getOrCreate("done"),
             service.literalStore.getOrCreate("BOOL")
         ))
-        service.addBodyOp(funcId, VoluntasIds.SETS_FIELD, listOf(
+        service.addMacroOp(macroId, VoluntasIds.SETS_FIELD, listOf(
             service.paramRef(0),
             service.literalStore.getOrCreate("done"),
             service.literalStore.getOrCreate(true)
         ))
 
-        service.invokeFunction(funcId, listOf(intent.id()))
+        service.invokeMacro(macroId, listOf(intent.id()))
 
         assertEquals(true, service.getById(intent.id())!!.fieldValues()["done"])
     }
@@ -80,12 +80,12 @@ class FunctionTest {
     // --- Bad parameter references at definition time ---
 
     @Test
-    fun `addBodyOp throws for out-of-range positional ref`() {
+    fun `addMacroOp throws for out-of-range positional ref`() {
         val service = freshService()
-        val funcId = service.defineFunction("do", listOf("intentId")) // only $0 is valid
+        val macroId = service.defineMacro("do", listOf("intentId")) // only $0 is valid
 
         val ex = assertThrows<IllegalArgumentException> {
-            service.addBodyOp(funcId, VoluntasIds.SETS_FIELD, listOf(
+            service.addMacroOp(macroId, VoluntasIds.SETS_FIELD, listOf(
                 service.paramRef(1), // $1 doesn't exist
                 service.literalStore.getOrCreate("done"),
                 service.literalStore.getOrCreate(true)
@@ -95,12 +95,12 @@ class FunctionTest {
     }
 
     @Test
-    fun `addBodyOp throws for unknown named ref`() {
+    fun `addMacroOp throws for unknown named ref`() {
         val service = freshService()
-        val funcId = service.defineFunction("do", listOf("intentId"))
+        val macroId = service.defineMacro("do", listOf("intentId"))
 
         val ex = assertThrows<IllegalArgumentException> {
-            service.addBodyOp(funcId, VoluntasIds.SETS_FIELD, listOf(
+            service.addMacroOp(macroId, VoluntasIds.SETS_FIELD, listOf(
                 service.paramRef("bogus"), // no param named "bogus"
                 service.literalStore.getOrCreate("done"),
                 service.literalStore.getOrCreate(true)
@@ -110,12 +110,12 @@ class FunctionTest {
     }
 
     @Test
-    fun `addBodyOp throws for positional ref on zero-parameter function`() {
+    fun `addMacroOp throws for positional ref on zero-parameter macro`() {
         val service = freshService()
-        val funcId = service.defineFunction("noop", emptyList())
+        val macroId = service.defineMacro("noop", emptyList())
 
         val ex = assertThrows<IllegalArgumentException> {
-            service.addBodyOp(funcId, VoluntasIds.SETS_FIELD, listOf(
+            service.addMacroOp(macroId, VoluntasIds.SETS_FIELD, listOf(
                 service.paramRef(0)
             ))
         }
@@ -123,12 +123,12 @@ class FunctionTest {
     }
 
     @Test
-    fun `addBodyOp throws for named ref on zero-parameter function`() {
+    fun `addMacroOp throws for named ref on zero-parameter macro`() {
         val service = freshService()
-        val funcId = service.defineFunction("noop", emptyList())
+        val macroId = service.defineMacro("noop", emptyList())
 
         val ex = assertThrows<IllegalArgumentException> {
-            service.addBodyOp(funcId, VoluntasIds.SETS_FIELD, listOf(
+            service.addMacroOp(macroId, VoluntasIds.SETS_FIELD, listOf(
                 service.paramRef("anything")
             ))
         }

@@ -14,9 +14,9 @@ object VoluntasIds {
     const val INSTANTIATES: Long      = 3L
     const val SETS_FIELD: Long        = 4L
     const val ADDS_PARTICIPANT: Long  = 5L
-    const val DEFINES_FUNCTION: Long  = 6L
-    const val DEFINES_BODY_OP: Long   = 9L
-    const val INVOKES_FUNCTION: Long  = 10L
+    const val DEFINES_MACRO: Long     = 6L
+    const val DEFINES_MACRO_OP: Long  = 9L
+    const val INVOKES_MACRO: Long     = 10L
 
     /** The "string intent" type entity, auto-bootstrapped. */
     const val STRING_INTENT_TYPE: Long = 7L
