@@ -9,12 +9,50 @@
 1002. Implement Intent Runtime
   1035. make 'types' act like constraints on additional op submission
   1013. make the runtime support function definition and invocation
+      done: true
+    1042. rename function primitives to macro throughout the codebase
+        done: true
+      1043. rename constants in VoluntasIds.kt: DEFINES_FUNCTION -> DEFINES_MACRO, DEFINES_BODY_OP -> DEFINES_MACRO_OP, INVOKES_FUNCTION -> INVOKES_MACRO
+          done: true
+      1044. rename data classes: FunctionDef -> MacroDef, BodyOpTemplate -> MacroBodyOp
+          done: true
+      1045. rename private state and handlers in VoluntasIntentService: functions -> macros, handleDefinesFunction -> handleDefinesMacro, handleDefinesBodyOp -> handleDefinesMacroOp, handleInvokesFunction -> handleInvokesMacro
+          done: true
+      1046. rename public API methods: defineFunction -> defineMacro, addBodyOp -> addMacroOp, invokeFunction -> invokeMacro, paramRef stays
+          done: true
+      1047. update FunctionTest.kt: rename file to MacroTest.kt, update all identifiers and test names
+          done: true
+      1048. update Runtime.md: replace all occurrences of function/function definition/function invocation with macro equivalents
+          done: true
 1003. Build Tooling to interact with Runtime
   1005. Command line tool
     1014. basic implementation with explicit commands
         done: true
     1017. allow the commands to be defined in the intent language itself
       1019. make it so the 'do' command is implemented as a function that adds field and sets value
+      1063. build standard library module and command interface
+        1064. write GenerateStandardModule.kt that produces modules/standard.pb
+          1070. define /standard/note type as a STRING_INTENT_TYPE subtype so its instances are visible non-meta intents with text
+          1071. define add-note macro with params [textLit, parentId]: body is one INSTANTIATES op for /standard/note with $textLit at participants[2] and $parentId at participants[3]
+          1072. define /standard/interface/command type with a command-name STRING field
+          1073. instantiate /standard/interface/command as a child of the add-note macro entity, set command-name field to note
+        1065. extend handleInstantiates to support visible string-subtype custom types
+          1074. allow DEFINES_TYPE to declare a parent type via participants[2] (e.g. STRING_INTENT_TYPE) to mark instances as visible
+          1075. track set of visible types in VoluntasIntentService (initially just STRING_INTENT_TYPE; expanded when DEFINES_TYPE names STRING_INTENT_TYPE as parent)
+          1076. in handleInstantiates, check if typeId is in visibleTypes and if so create non-meta intent with text from participants[2], parent from participants[3]
+          1077. update defineType() helper to accept optional parentTypeId and emit it as participants[2] of the DEFINES_TYPE relationship
+        1066. verify ModuleLoader correctly remaps DEFINES_MACRO and DEFINES_MACRO_OP ops
+        1067. expose loaded macros and command annotations from VoluntasIntentService
+          1078. add getMacroByName(name: String) to VoluntasIntentService returning MacroDef and its entity ID
+          1079. add getCommandAnnotations() returning list of (commandName, macroEntityId) by scanning instances of /standard/interface/command type
+          1080. track which type entity corresponds to /standard/interface/command by name lookup after module load
+        1068. add DynamicMacroCommand to CommandExecutor that invokes a named macro
+          1081. DynamicMacroCommand holds command keyword and macroEntityId; on process() converts text arg to literal ID then calls service.invokeMacro(macroEntityId, listOf(textLitId, focalIntent))
+          1082. CommandExecutor needs a reference to VoluntasIntentService (not just IntentStreamConsumer) so it can call invokeMacro and literalStore.getOrCreate
+          1083. add registerCommand(keyword, macroEntityId) on CommandExecutor so dynamic commands can be added after module load
+        1069. load standard.pb in VoluntasRuntime and register dynamic commands from /standard/interface/command instances
+          1084. after loadModules() in VoluntasRuntime, call service.getCommandAnnotations() and register a DynamicMacroCommand for each result
+          1085. standard.pb is always loaded first so its types are available for the main stream and any other modules
   1006. Web interface
     1029. ability for intent ops to define their css rendering styles on the stream
     1037. view on the literal store with reference counts
