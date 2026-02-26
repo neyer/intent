@@ -13,6 +13,7 @@ import voluntas.v1.UpdateIntentParent
 import com.intentevolved.com.intentevolved.CommandResult
 import com.intentevolved.com.intentevolved.IntentStreamConsumer
 import com.intentevolved.com.intentevolved.IntentStateProvider
+import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 import java.io.File
 
@@ -405,7 +406,7 @@ class ImportCommand : Command("import") {
             // Recurse into children
             val scope = sourceService.getFocalScope(oldId)
             for (child in scope.children) {
-                if (!child.isMeta()) {
+                if (!child.isMeta() && child.id() >= VoluntasIds.FIRST_USER_ENTITY) {
                     importIntent(child.id(), newId)
                 }
             }

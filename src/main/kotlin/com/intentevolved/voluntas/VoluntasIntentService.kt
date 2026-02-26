@@ -96,18 +96,29 @@ class VoluntasIntentService private constructor(
     // All instances of each type, keyed by type entity ID.
     private val instancesByType = mutableMapOf<Long, MutableList<Long>>()
 
+    // --- Name system ---
+    // nameNodeToPath: name node entity ID → full path string (e.g. "/standard/note").
+    // Seeded with NAMES_ROOT → "" so child paths build as "" + "/" + segment = "/segment".
+    private val nameNodeToPath = mutableMapOf(VoluntasIds.NAMES_ROOT to "")
+    // namesByPath: full path → name node entity ID (reverse of nameNodeToPath).
+    private val namesByPath = mutableMapOf<String, Long>()
+    // nameNodeByReferent: referent entity ID → name node entity ID.
+    private val nameNodeByReferent = mutableMapOf<Long, Long>()
+    // referentByNameNode: name node entity ID → referent entity ID.
+    private val referentByNameNode = mutableMapOf<Long, Long>()
+    // typeAutoNames: type entity IDs whose instances should be automatically named.
+    private val typeAutoNames = mutableSetOf<Long>()
+
     // --- Bootstrap ---
 
     private fun emitBootstrap(rootIntent: String) {
         // 1. Entity 7 = "string intent" type
-        //    Relationship(id=7, participants=[DEFINES_TYPE])
         emitRelationship(Relationship.newBuilder()
             .setId(VoluntasIds.STRING_INTENT_TYPE)
             .addParticipants(VoluntasIds.DEFINES_TYPE)
             .build())
 
         // 2. Entity 8 = text field of string intent type
-        //    Relationship(id=8, participants=[DEFINES_FIELD, STRING_INTENT_TYPE, "text", STRING])
         val textLit = literalStore.getOrCreate("text")
         val stringTypeLit = literalStore.getOrCreate("STRING")
         emitRelationship(Relationship.newBuilder()
@@ -119,13 +130,51 @@ class VoluntasIntentService private constructor(
             .build())
 
         // 3. Entity 0 = root intent (instantiation of string_intent_type, no parent)
-        //    Relationship(id=0, participants=[INSTANTIATES, STRING_INTENT_TYPE, rootTextLit])
         val rootTextLit = literalStore.getOrCreate(rootIntent)
         emitRelationship(Relationship.newBuilder()
             .setId(VoluntasIds.ROOT_INTENT)
             .addParticipants(VoluntasIds.INSTANTIATES)
             .addParticipants(VoluntasIds.STRING_INTENT_TYPE)
             .addParticipants(rootTextLit)
+            .build())
+
+        // 4. Entity 11 = NAME_TYPE — the type for name nodes
+        emitRelationship(Relationship.newBuilder()
+            .setId(VoluntasIds.NAME_TYPE)
+            .addParticipants(VoluntasIds.DEFINES_TYPE)
+            .build())
+
+        // 5. Entity 12 = META_ROOT — visible child of root intent, parent of all meta structure
+        val metaTextLit = literalStore.getOrCreate("meta")
+        emitRelationship(Relationship.newBuilder()
+            .setId(VoluntasIds.META_ROOT)
+            .addParticipants(VoluntasIds.INSTANTIATES)
+            .addParticipants(VoluntasIds.STRING_INTENT_TYPE)
+            .addParticipants(metaTextLit)
+            .addParticipants(VoluntasIds.ROOT_INTENT)
+            .build())
+
+        // 6. Entity 13 = NAMES_ROOT — root of the name path system, child of META_ROOT.
+        //    participants[3] = META_ROOT is the intent-tree parent (not a name-node parent).
+        //    The handler special-cases NAMES_ROOT (its path "" is pre-seeded in nameNodeToPath).
+        val namesTextLit = literalStore.getOrCreate("names")
+        emitRelationship(Relationship.newBuilder()
+            .setId(VoluntasIds.NAMES_ROOT)
+            .addParticipants(VoluntasIds.INSTANTIATES)
+            .addParticipants(VoluntasIds.NAME_TYPE)
+            .addParticipants(namesTextLit)
+            .addParticipants(VoluntasIds.META_ROOT)
+            .build())
+
+        // 7. Entity 14 = /meta name node — names META_ROOT in the path system
+        //    participants: [INSTANTIATES, NAME_TYPE, textLit, parentNameNodeId, referentId]
+        emitRelationship(Relationship.newBuilder()
+            .setId(VoluntasIds.META_NAME_NODE)
+            .addParticipants(VoluntasIds.INSTANTIATES)
+            .addParticipants(VoluntasIds.NAME_TYPE)
+            .addParticipants(metaTextLit)
+            .addParticipants(VoluntasIds.NAMES_ROOT)
+            .addParticipants(VoluntasIds.META_ROOT)
             .build())
     }
 
@@ -245,10 +294,80 @@ class VoluntasIntentService private constructor(
         trackEntityId(id)
     }
 
+    /**
+     * Handle INSTANTIATES for NAME_TYPE entities.
+     *
+     * Participant convention:
+     *   [0] INSTANTIATES
+     *   [1] NAME_TYPE
+     *   [2] textLit         — the name segment (e.g. "standard", "note", "1042")
+     *   [3] parentNameNodeId — parent in the name tree (absent only for NAMES_ROOT itself)
+     *   [4] referentEntityId — the entity this name node names (optional)
+     *
+     * Special case: if entityId == NAMES_ROOT, participants[3] is the intent-tree parent
+     * (META_ROOT) rather than a name-node parent. Its path is pre-seeded as "" in
+     * nameNodeToPath, so no path computation is needed.
+     */
+    private fun handleInstantiatesNameNode(rel: Relationship, timestamp: Long?) {
+        val entityId = rel.id.toLong()
+        val participants = rel.participantsList
+        val textLitId = if (participants.size >= 3) participants[2] else return
+        val text = literalStore.getString(textLitId) ?: return
+
+        if (entityId == VoluntasIds.NAMES_ROOT) {
+            // Root of the name system — path already seeded; participants[3] is intent-tree parent.
+            val intentTreeParentId = if (participants.size >= 4) participants[3] else null
+            if (!byId.containsKey(entityId)) {
+                byId[entityId] = IntentImpl(
+                    text = "NameRoot",
+                    id = entityId,
+                    participantIds = if (intentTreeParentId != null) mutableListOf(intentTreeParentId) else mutableListOf(),
+                    stateProvider = this,
+                    createdTimestamp = timestamp,
+                    isMeta = true
+                )
+            }
+            if (intentTreeParentId != null) linkChild(intentTreeParentId, entityId)
+        } else {
+            // Regular name node — compute path from parent.
+            val parentNameNodeId = if (participants.size >= 4) participants[3] else return
+            val parentPath = nameNodeToPath[parentNameNodeId] ?: return
+            val path = "$parentPath/$text"
+
+            nameNodeToPath[entityId] = path
+            namesByPath[path] = entityId
+
+            if (participants.size >= 5) {
+                val referentId = participants[4]
+                nameNodeByReferent[referentId] = entityId
+                referentByNameNode[entityId] = referentId
+            }
+
+            if (!byId.containsKey(entityId)) {
+                byId[entityId] = IntentImpl(
+                    text = "NameNode:$path",
+                    id = entityId,
+                    participantIds = mutableListOf(parentNameNodeId),
+                    stateProvider = this,
+                    createdTimestamp = timestamp,
+                    isMeta = true
+                )
+            }
+            linkChild(parentNameNodeId, entityId)
+        }
+        trackEntityId(entityId)
+    }
+
     private fun handleInstantiates(rel: Relationship, timestamp: Long?) {
         val participants = rel.participantsList
         val typeId = if (participants.size >= 2) participants[1] else return
         val entityId = rel.id.toLong()
+
+        // Name nodes are handled separately — they build the path namespace.
+        if (typeId == VoluntasIds.NAME_TYPE) {
+            handleInstantiatesNameNode(rel, timestamp)
+            return
+        }
 
         if (typeId in visibleTypes) {
             // Visible type: create a non-meta intent with text from participants[2].
@@ -288,6 +407,15 @@ class VoluntasIntentService private constructor(
         }
         instancesByType.getOrPut(typeId) { mutableListOf() }.add(entityId)
         trackEntityId(entityId)
+
+        // Auto-name the new instance if the type has opted in.
+        // Skipped during replay — the name node ops are already in the stream.
+        if (!isReplaying && typeId in typeAutoNames) {
+            val typePath = getNamePath(typeId)
+            if (typePath != null) {
+                findOrCreateNameNode("$typePath/$entityId", entityId)
+            }
+        }
     }
 
     private fun handleSetsField(rel: Relationship, timestamp: Long?) {
@@ -362,7 +490,12 @@ class VoluntasIntentService private constructor(
                         lit.hasBytesVal()  -> lit.bytesVal.toByteArray()
                         else -> return
                     }
-                    existing.setFieldValue(fieldName, value)
+                    if (fieldName == "auto-name-instances" && value == true) {
+                        // Internal flag — populate typeAutoNames; don't expose as a user field.
+                        typeAutoNames.add(targetId)
+                    } else {
+                        existing.setFieldValue(fieldName, value)
+                    }
                 }
             }
         }
@@ -678,6 +811,7 @@ class VoluntasIntentService private constructor(
             builder.addParticipants(literalStore.getOrCreate(paramName))
         }
         emitRelationship(builder.build())
+        findOrCreateNameNode(name, id)
         return id
     }
 
@@ -783,14 +917,77 @@ class VoluntasIntentService private constructor(
         macros.entries.find { it.value.name == name }?.let { it.key to it.value }
 
     /**
+     * Find or create the chain of name nodes for [path], linking the final node to [referentId].
+     * Paths may be rooted ("/standard/note") or bare ("do"); bare names are treated as top-level
+     * (direct children of NAMES_ROOT). Returns the entity ID of the final name node.
+     *
+     * Idempotent: if a name node already exists at a given path it is reused. Only the final
+     * node is linked to [referentId]; intermediate nodes (e.g. "/standard") remain referent-free
+     * unless they were already associated with an entity by a previous call.
+     */
+    fun findOrCreateNameNode(path: String, referentId: Long): Long {
+        val normalised = if (path.startsWith("/")) path else "/$path"
+        val segments = normalised.trimStart('/').split('/')
+
+        var currentParentNameNodeId = VoluntasIds.NAMES_ROOT
+        var currentPath = ""
+
+        for ((index, segment) in segments.withIndex()) {
+            currentPath = "$currentPath/$segment"
+            val isLast = index == segments.size - 1
+
+            val existingNodeId = namesByPath[currentPath]
+            if (existingNodeId != null) {
+                // Node already exists — if this is the final segment, wire up the referent.
+                if (isLast && !referentByNameNode.containsKey(existingNodeId)) {
+                    nameNodeByReferent[referentId] = existingNodeId
+                    referentByNameNode[existingNodeId] = referentId
+                }
+                currentParentNameNodeId = existingNodeId
+            } else {
+                val newId = nextEntityId++
+                val textLit = literalStore.getOrCreate(segment)
+                val builder = Relationship.newBuilder()
+                    .setId(newId)
+                    .addParticipants(VoluntasIds.INSTANTIATES)
+                    .addParticipants(VoluntasIds.NAME_TYPE)
+                    .addParticipants(textLit)
+                    .addParticipants(currentParentNameNodeId)
+                if (isLast) builder.addParticipants(referentId)
+                emitRelationship(builder.build())
+                currentParentNameNodeId = newId
+            }
+        }
+        return currentParentNameNodeId
+    }
+
+    /**
+     * Returns the entity ID of the entity named by [path], or null if the path has no
+     * registered name node or that node has no referent.
+     */
+    fun getEntityByPath(path: String): Long? {
+        val normalised = if (path.startsWith("/")) path else "/$path"
+        val nameNodeId = namesByPath[normalised] ?: return null
+        return referentByNameNode[nameNodeId]
+    }
+
+    /**
+     * Returns the full name path (e.g. "/standard/note") for [entityId], or null if
+     * the entity has no associated name node.
+     */
+    fun getNamePath(entityId: Long): String? {
+        val nameNodeId = nameNodeByReferent[entityId] ?: return null
+        return nameNodeToPath[nameNodeId]
+    }
+
+    /**
      * Scans all instances of the "/standard/interface/command" type and returns a list of
      * (commandName, macroEntityId) pairs. The macro entity ID is the parent of each annotation
      * instance. Returns empty list if the standard module has not been loaded.
      */
     fun getCommandAnnotations(): List<Pair<String, Long>> {
-        val commandType = byId.values.find { it.text() == "/standard/interface/command" }
-            ?: return emptyList()
-        return getInstancesOfType(commandType.id()).mapNotNull { instanceId ->
+        val commandTypeId = getEntityByPath("/standard/interface/command") ?: return emptyList()
+        return getInstancesOfType(commandTypeId).mapNotNull { instanceId ->
             val instance = byId[instanceId] as? IntentImpl ?: return@mapNotNull null
             val commandName = instance.fieldValues()["command-name"] as? String
                 ?: return@mapNotNull null
@@ -838,7 +1035,12 @@ class VoluntasIntentService private constructor(
      * Emits DEFINES_TYPE and SETS_FIELD for the type name.
      * Returns the new type entity ID.
      */
-    fun defineType(name: String, moduleEntityId: Long? = null, parentTypeId: Long? = null): Long {
+    fun defineType(
+        name: String,
+        moduleEntityId: Long? = null,
+        parentTypeId: Long? = null,
+        autoNameInstances: Boolean = false
+    ): Long {
         require(parentTypeId == null || moduleEntityId != null) {
             "moduleEntityId is required when parentTypeId is specified"
         }
@@ -854,6 +1056,20 @@ class VoluntasIntentService private constructor(
         }
         emitRelationship(builder.build())
         edit(id, name)
+        findOrCreateNameNode(name, id)
+        if (autoNameInstances) {
+            // Store flag as a field so it survives serialisation and is picked up during replay.
+            val fieldNameLit = literalStore.getOrCreate("auto-name-instances")
+            val valueLit = literalStore.getOrCreate(true)
+            val relId = nextEntityId++
+            emitRelationship(Relationship.newBuilder()
+                .setId(relId)
+                .addParticipants(VoluntasIds.SETS_FIELD)
+                .addParticipants(id)
+                .addParticipants(fieldNameLit)
+                .addParticipants(valueLit)
+                .build())
+        }
         return id
     }
 

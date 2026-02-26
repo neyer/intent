@@ -21,6 +21,19 @@ object VoluntasIds {
     /** The "string intent" type entity, auto-bootstrapped. */
     const val STRING_INTENT_TYPE: Long = 7L
 
+    /** The type for name nodes — instances locate entities in the path namespace. */
+    const val NAME_TYPE: Long = 11L
+
+    /** Root meta intent — visible child of root intent, parent of all meta structure. */
+    const val META_ROOT: Long = 12L
+
+    /** Root of the name path system — instance of NAME_TYPE, child of META_ROOT.
+     *  Its path is "" (the empty string); all other paths are built relative to it. */
+    const val NAMES_ROOT: Long = 13L
+
+    /** Name node for the path "/meta" — names the META_ROOT entity. */
+    const val META_NAME_NODE: Long = 14L
+
     /** The root intent always has entity ID 0. */
     const val ROOT_INTENT: Long = 0L
 

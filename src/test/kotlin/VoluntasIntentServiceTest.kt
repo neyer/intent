@@ -91,7 +91,7 @@ class VoluntasIntentServiceTest {
 
         // Verify state before saving
         val allIntents = svc.getAll()
-        assertEquals(4, allIntents.size) // root + 3
+        assertEquals(5, allIntents.size) // root + meta + 3
         assertEquals("Design the mobile UI", svc.getById(intent1.id())?.text())
         assertEquals("Implement backend API", svc.getById(intent2.id())?.text())
         assertEquals("Create database schema", svc.getById(intent3.id())?.text())
@@ -104,7 +104,7 @@ class VoluntasIntentServiceTest {
 
         // Verify loaded content matches original
         val loadedIntents = loadedService.getAll()
-        assertEquals(4, loadedIntents.size)
+        assertEquals(5, loadedIntents.size)
 
         val loadedIntent1 = loadedService.getById(intent1.id())!!
         assertEquals("Design the mobile UI", loadedIntent1.text())
@@ -223,8 +223,8 @@ class VoluntasIntentServiceTest {
         service.addIntent("Intent 2", parentId = 0)
 
         val all = service.getAll()
-        // root + 2 user intents = 3
-        assertEquals(3, all.size)
+        // root + meta + 2 user intents = 4
+        assertEquals(4, all.size)
         assertTrue(all.none { it.isMeta() })
     }
 
@@ -324,8 +324,8 @@ class VoluntasIntentServiceTest {
         svc.writeToFile(testFile)
         val loaded = VoluntasIntentService.fromFile(testFile)
 
-        // root + 10
-        assertEquals(11, loaded.getAll().size)
+        // root + meta + 10
+        assertEquals(12, loaded.getAll().size)
         for (i in ids.indices) {
             val intent = loaded.getById(ids[i])!!
             assertEquals("Intent ${i + 1}", intent.text())

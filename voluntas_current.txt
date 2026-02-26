@@ -7,6 +7,7 @@
       done: true
   1034. add concepts of users and stream authority
   1140. add 'meta' boostrapped entity with 'names' under it
+      done: true
 1002. Implement Intent Runtime
   1035. make 'types' act like constraints on additional op submission
   1013. make the runtime support function definition and invocation
@@ -25,6 +26,58 @@
           done: true
       1048. update Runtime.md: replace all occurrences of function/function definition/function invocation with macro equivalents
           done: true
+  1146. Add names as a first-class concept in the runtime
+    1147. Phase 1: New reserved entities
+      1148. Add NAME_TYPE = 11L to VoluntasIds.kt — the type for all name nodes
+      1149. Add META_ROOT = 12L to VoluntasIds.kt — root meta intent, child of root intent
+      1150. Add NAMES_ROOT = 13L to VoluntasIds.kt — instance of NAME_TYPE, root of path system, child of META_ROOT
+      1151. Update FIRST_USER_ENTITY if it would collide (currently safe at 1000)
+    1152. Phase 2: New internal state in VoluntasIntentService
+      1153. Add nameNodeToPath: MutableMap<Long, String> — name node entity ID to full path string
+      1154. Add namesByPath: MutableMap<String, Long> — full path to name node entity ID
+      1155. Add nameNodeByReferent: MutableMap<Long, Long> — referent entity ID to its name node entity ID
+      1156. Add typeAutoNames: MutableSet<Long> — type entity IDs that auto-name their instances
+      1157. Seed nameNodeToPath[NAMES_ROOT] = empty string in constructor so child paths build correctly
+    1158. Phase 3: Bootstrap changes in emitBootstrap()
+      1159. Emit DEFINES_TYPE for NAME_TYPE (entity 11), with META_ROOT as module entity
+      1160. Emit INSTANTIATES STRING_INTENT_TYPE for META_ROOT (entity 12), text='meta', parent=ROOT_INTENT — visible child of root
+      1161. Emit INSTANTIATES NAME_TYPE for NAMES_ROOT (entity 13), text='names', parent=META_ROOT
+      1162. Emit INSTANTIATES NAME_TYPE for the /meta name node — text='meta', parent=NAMES_ROOT, referent=META_ROOT
+    1163. Phase 4: Handle NAME_TYPE in handleInstantiates
+      1164. Add NAME_TYPE branch in handleInstantiates: participants = [NAME_TYPE, textLit, parentNameNodeId, referentEntityId]
+      1165. Compute path: parentPath = nameNodeToPath[parentNameNodeId], then path = parentPath + '/' + text
+      1166. Store: nameNodeToPath[entityId] = path, namesByPath[path] = entityId
+      1167. If referentEntityId present: store nameNodeByReferent[referentId] = entityId
+      1168. Create meta IntentImpl for the name node (isMeta=true), link as child of parentNameNodeId
+    1169. Phase 5: New helper methods
+      1170. findOrCreateNameNode(path: String, referentId: Long): Long — splits path on '/', walks/creates name nodes from NAMES_ROOT down
+      1171. getEntityByPath(path: String): Long? — looks up namesByPath then nameNodeByReferent
+      1172. getNamePath(entityId: Long): String? — looks up nameNodeByReferent in reverse to get the path for any entity
+    1173. Phase 6: Update defineType()
+      1174. Add autoNameInstances: Boolean = false parameter
+      1175. After emitting DEFINES_TYPE, call findOrCreateNameNode(name, typeEntityId) — types always get a name node
+      1176. If autoNameInstances=true, emit SETS_FIELD on the type entity: field 'auto-name-instances' = true
+      1177. handleDefinesField / handleSetsField will store this in typeAutoNames set during replay
+    1178. Phase 7: Update defineMacro()
+      1179. After emitting DEFINES_MACRO, call findOrCreateNameNode(name, macroEntityId) — macros always get a name node
+      1180. Name is already a full path (e.g. '/standard/add-note') — caller is responsible for passing a rooted path
+    1181. Phase 8: Auto-naming instances in handleInstantiates
+      1182. After creating entity for a visible-type instantiation, check if typeId in typeAutoNames
+      1183. If yes, call findOrCreateNameNode(typePath + '/' + entityId, entityId) to create the instance name node
+      1184. typePath is retrieved via getNamePath on the type entity
+    1185. Phase 9: Fix lookups that currently use text-matching
+      1186. Replace byId.values.find { it.text() == '/standard/interface/command' } with getEntityByPath('/standard/interface/command')
+      1187. Audit all similar string-based entity lookups and replace with path-based lookup
+    1188. Phase 10: Update GenerateStandardModule.kt
+      1189. Pass full rooted paths: defineType('/standard/note', ...) and defineType('/standard/interface/command', ...)
+      1190. Pass full rooted path: defineMacro('/standard/add-note', ...)
+      1191. Decide autoNameInstances for /standard/note — probably true so note instances get paths like /standard/note/1042
+      1192. Update command annotation setFieldValue: 'command-name' = 'note' stays, but keyword now resolves via name path
+    1193. Phase 11: Regenerate standard.pb and verify
+      1194. Run GenerateStandardModule to regenerate modules/standard.pb with name-aware definitions
+      1195. Confirm /standard, /standard/note, /standard/add-note, /standard/interface/command all resolve by path
+      1196. Confirm /meta resolves to META_ROOT entity by path
+      1197. Run existing MacroTest suite to confirm macro invocation still works
 1003. Build Tooling to interact with Runtime
   1005. Command line tool
     1014. basic implementation with explicit commands

@@ -98,6 +98,14 @@ tasks.register<JavaExec>("runClient") {
     args = listOf("localhost", "50051")
 }
 
+// Task to regenerate modules/standard.pb
+tasks.register<JavaExec>("runGenerateStandard") {
+    group = "application"
+    description = "Regenerate modules/standard.pb"
+    mainClass.set("com.intentevolved.plans.GenerateStandardModuleKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
 // Task to print runtime classpath for use in shell scripts
 tasks.register("printRuntimeClasspath") {
     doLast {

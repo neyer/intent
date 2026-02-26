@@ -27,7 +27,8 @@ fun main() {
     val noteType = service.defineType(
         name = "/standard/note",
         moduleEntityId = moduleRoot,
-        parentTypeId = VoluntasIds.STRING_INTENT_TYPE
+        parentTypeId = VoluntasIds.STRING_INTENT_TYPE,
+        autoNameInstances = true
     )
 
     // -------------------------------------------------------------------------
@@ -35,7 +36,7 @@ fun main() {
     // Params: textLit (literal ID of the note text), parentId (entity to attach to)
     // Body: one INSTANTIATES op that creates a /standard/note visible intent.
     // -------------------------------------------------------------------------
-    val addNoteMacro = service.defineMacro("add-note", listOf("textLit", "parentId"))
+    val addNoteMacro = service.defineMacro("/standard/add-note", listOf("textLit", "parentId"))
     service.addMacroOp(
         addNoteMacro,
         VoluntasIds.INSTANTIATES,
@@ -52,7 +53,8 @@ fun main() {
     // -------------------------------------------------------------------------
     val commandInterfaceType = service.defineType(
         name = "/standard/interface/command",
-        moduleEntityId = moduleRoot
+        moduleEntityId = moduleRoot,
+        parentTypeId = null
     )
     service.addField(
         commandInterfaceType,

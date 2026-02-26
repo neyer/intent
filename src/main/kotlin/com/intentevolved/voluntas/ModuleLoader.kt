@@ -130,6 +130,14 @@ class ModuleLoader(private val service: VoluntasIntentService) {
             if (matchedModuleEntityIds.contains(targetId)) return true
         }
 
+        // If this is a name-node instantiation (INSTANTIATES NAME_TYPE) whose referent is a
+        // matched entity (participants[4]), skip — the name node already exists in the main stream.
+        if (relType == VoluntasIds.INSTANTIATES && participants.size >= 2 &&
+            participants[1] == VoluntasIds.NAME_TYPE && participants.size >= 5) {
+            val referentModuleId = participants[4]
+            if (matchedModuleEntityIds.contains(referentModuleId)) return true
+        }
+
         return false
     }
 
