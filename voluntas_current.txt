@@ -27,6 +27,7 @@
       1048. update Runtime.md: replace all occurrences of function/function definition/function invocation with macro equivalents
           done: true
   1146. Add names as a first-class concept in the runtime
+      done: true
     1147. Phase 1: New reserved entities
       1148. Add NAME_TYPE = 11L to VoluntasIds.kt — the type for all name nodes
       1149. Add META_ROOT = 12L to VoluntasIds.kt — root meta intent, child of root intent
