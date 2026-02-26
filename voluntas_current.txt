@@ -100,3 +100,6 @@
       done: true
   1033. explanation of reasoning behind references and literal stores
 1124. /standard
+1141. Test intent from CLAUDE.md tools
+    completed: 1772069325873514654
+    done: true
