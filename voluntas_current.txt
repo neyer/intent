@@ -6,6 +6,7 @@
   1010. bootstrap some initial type defintions
       done: true
   1034. add concepts of users and stream authority
+  1140. add 'meta' boostrapped entity with 'names' under it
 1002. Implement Intent Runtime
   1035. make 'types' act like constraints on additional op submission
   1013. make the runtime support function definition and invocation
