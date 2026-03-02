@@ -46,13 +46,13 @@ class ModuleLoader(private val service: VoluntasIntentService) {
             }
         }
 
-        // 2. Match or create module root (entity 0 in module stream)
+        // 2. Match or create module root (entity 0 in module stream) — placed under META_ROOT
         val existingRoot = service.getAll().find { it.text() == module.rootText }
         if (existingRoot != null) {
             entityIdMap[VoluntasIds.ROOT_INTENT] = existingRoot.id()
             alreadyExisted.add(existingRoot.id())
         } else {
-            val newRoot = service.addIntent(module.rootText, VoluntasIds.ROOT_INTENT)
+            val newRoot = service.addIntent(module.rootText, VoluntasIds.META_ROOT)
             entityIdMap[VoluntasIds.ROOT_INTENT] = newRoot.id()
             newlyCreated.add(newRoot.id())
         }
@@ -70,6 +70,26 @@ class ModuleLoader(private val service: VoluntasIntentService) {
                 matchedModuleEntityIds.add(moduleTypeId)
             }
             // else: will be created during replay
+        }
+
+        // 3.5 Match macros by name
+        for (op in module.stream.opsList) {
+            if (!op.hasRelationship()) continue
+            val rel = op.relationship
+            val participants = rel.participantsList
+            if (participants.isEmpty() || participants[0] != VoluntasIds.DEFINES_MACRO) continue
+            val moduleEntityId = rel.id.toLong()
+            if (moduleEntityId < VoluntasIds.FIRST_USER_ENTITY) continue
+
+            val nameLitId = if (participants.size >= 2) participants[1] else continue
+            val macroName = module.moduleService.literalStore.getString(nameLitId) ?: continue
+
+            val existing = service.getMacroByName(macroName)
+            if (existing != null) {
+                entityIdMap[moduleEntityId] = existing.first
+                alreadyExisted.add(existing.first)
+                matchedModuleEntityIds.add(moduleEntityId)
+            }
         }
 
         // 4. Replay module stream ops, skipping bootstrap and already-matched entities
@@ -90,6 +110,45 @@ class ModuleLoader(private val service: VoluntasIntentService) {
 
             // Skip ops for already-matched entities
             if (isOpForMatchedEntity(relType, moduleEntityId, participants, matchedModuleEntityIds, entityIdMap)) continue
+
+            // For name node INSTANTIATES: match by path if it already exists in the main stream.
+            if (relType == VoluntasIds.INSTANTIATES && participants.size >= 4 &&
+                participants[1] == VoluntasIds.NAME_TYPE) {
+                val parentNameNodeModuleId = participants[3]
+                val mainParentId = entityIdMap[parentNameNodeModuleId]
+                    ?: if (parentNameNodeModuleId < VoluntasIds.FIRST_USER_ENTITY) parentNameNodeModuleId else null
+                val segment = module.moduleService.literalStore.getString(participants[2])
+                if (mainParentId != null && !segment.isNullOrEmpty()) {
+                    val parentPath = service.getNameNodePath(mainParentId) ?: ""
+                    val path = "$parentPath/$segment"
+                    val existingNodeId = service.getNameNodeByPath(path)
+                    if (existingNodeId != null) {
+                        entityIdMap[moduleEntityId] = existingNodeId
+                        alreadyExisted.add(existingNodeId)
+                        matchedModuleEntityIds.add(moduleEntityId)
+                        continue
+                    }
+                }
+            }
+
+            // For non-name INSTANTIATES where both type and parent are already mapped,
+            // look for an existing instance rather than creating a new one.
+            if (relType == VoluntasIds.INSTANTIATES && participants.size >= 3 &&
+                participants[1] != VoluntasIds.NAME_TYPE) {
+                val mappedTypeId = entityIdMap[participants[1]]
+                    ?: if (participants[1] < VoluntasIds.FIRST_USER_ENTITY) participants[1] else null
+                val mappedParentId = entityIdMap[participants[2]]
+                    ?: if (participants[2] < VoluntasIds.FIRST_USER_ENTITY) participants[2] else null
+                if (mappedTypeId != null && mappedParentId != null) {
+                    val existingInstance = service.getInstanceOfTypeWithParent(mappedTypeId, mappedParentId)
+                    if (existingInstance != null) {
+                        entityIdMap[moduleEntityId] = existingInstance
+                        alreadyExisted.add(existingInstance)
+                        matchedModuleEntityIds.add(moduleEntityId)
+                        continue
+                    }
+                }
+            }
 
             // Allocate new ID if needed
             if (!entityIdMap.containsKey(moduleEntityId)) {
@@ -121,13 +180,19 @@ class ModuleLoader(private val service: VoluntasIntentService) {
         matchedModuleEntityIds: Set<Long>,
         entityIdMap: Map<Long, Long>
     ): Boolean {
-        // If this entity itself is matched, skip DEFINES_TYPE for it
-        if (relType == VoluntasIds.DEFINES_TYPE && matchedModuleEntityIds.contains(moduleEntityId)) return true
+        // If this entity itself is matched, skip DEFINES_TYPE or DEFINES_MACRO for it
+        if ((relType == VoluntasIds.DEFINES_TYPE || relType == VoluntasIds.DEFINES_MACRO) &&
+            matchedModuleEntityIds.contains(moduleEntityId)) return true
 
         // If this is a SETS_FIELD or DEFINES_FIELD targeting a matched entity, skip
         if ((relType == VoluntasIds.SETS_FIELD || relType == VoluntasIds.DEFINES_FIELD) && participants.size >= 2) {
             val targetId = participants[1]
             if (matchedModuleEntityIds.contains(targetId)) return true
+        }
+
+        // If this is a DEFINES_MACRO_OP whose macro (participants[1]) is matched, skip
+        if (relType == VoluntasIds.DEFINES_MACRO_OP && participants.size >= 2) {
+            if (matchedModuleEntityIds.contains(participants[1])) return true
         }
 
         // If this is a name-node instantiation (INSTANTIATES NAME_TYPE) whose referent is a

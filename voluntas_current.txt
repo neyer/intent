@@ -9,8 +9,9 @@
   1140. add 'meta' boostrapped entity with 'names' under it
       done: true
 1002. Implement Intent Runtime
-  1223. add 'views' as first class concept in the runtime
   1729. bootstrap
+    1773. load existing data
+    1774. emit bootstrap elements if not present
   1730. processing new intents
     1035. make 'types' act like constraints on additional op submission
     1013. make the runtime support function definition and invocation
@@ -238,10 +239,11 @@
     1136. tooling for working on voluntas
       1137. git hook for regenerating text version of plan on commit
           done: true
+  1223. add 'views' as first class concept in the runtime
 1004. Write Documentation
   1030. basic readme
       done: true
   1033. explanation of reasoning behind references and literal stores
-1594. software
-1620. standard
 12. meta
+  1775. software
+  1792. standard

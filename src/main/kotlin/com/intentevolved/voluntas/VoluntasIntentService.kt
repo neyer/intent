@@ -446,8 +446,9 @@ class VoluntasIntentService private constructor(
             // Generic instantiation → meta intent.
             // participants[2], if present, is the parent entity to link under.
             val parentEntityId = if (participants.size >= 3) participants[2] else null
+            val typeName = getNamePath(typeId)?.substringAfterLast('/') ?: "instance"
             byId[entityId] = IntentImpl(
-                text = "Instance:${entityId} of type:${typeId}",
+                text = "$typeName:$entityId",
                 id = entityId,
                 participantIds = if (parentEntityId != null) mutableListOf(parentEntityId) else mutableListOf(),
                 stateProvider = this,
@@ -548,6 +549,21 @@ class VoluntasIntentService private constructor(
                         typeAutoNames.add(targetId)
                     } else {
                         existing.setFieldValue(fieldName, value)
+                        // For "command-name", update the display text to "<type> <command>"
+                        if (fieldName == "command-name" && value is String && value.isNotEmpty()) {
+                            val typeName = existing.text().substringBefore(':').ifEmpty { "instance" }
+                            byId[targetId] = IntentImpl(
+                                text = "$typeName $value",
+                                id = targetId,
+                                participantIds = existing.participantIds,
+                                stateProvider = this,
+                                createdTimestamp = existing.createdTimestamp(),
+                                lastUpdatedTimestamp = timestamp,
+                                fields = existing.fields() as MutableMap<String, FieldDetails>,
+                                values = existing.fieldValues() as MutableMap<String, Any>,
+                                isMeta = existing.isMeta()
+                            )
+                        }
                     }
                 }
             }
@@ -1013,6 +1029,19 @@ class VoluntasIntentService private constructor(
         }
         return currentParentNameNodeId
     }
+
+    /**
+     * Returns the first entity that is an instance of [typeId] whose primary parent is [parentId],
+     * or null if none exists. Used by [ModuleLoader] to match annotation instances on reload.
+     */
+    internal fun getInstanceOfTypeWithParent(typeId: Long, parentId: Long): Long? =
+        instancesByType[typeId]?.find { id -> getById(id)?.participantIds()?.firstOrNull() == parentId }
+
+    /** Returns the name node entity ID for [path], or null if the path has no name node. */
+    internal fun getNameNodeByPath(path: String): Long? = namesByPath[path]
+
+    /** Returns the path string for [nameNodeId], or null if not a known name node. */
+    internal fun getNameNodePath(nameNodeId: Long): String? = nameNodeToPath[nameNodeId]
 
     /**
      * Returns the entity ID of the entity named by [path], or null if the path has no

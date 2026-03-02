@@ -82,6 +82,10 @@ class VoluntasRuntime(
             val module = VoluntasModule.fromFile(file.absolutePath)
             val manifest = loader.loadModule(module)
             println("  Module '${module.rootText}': ${manifest.newlyCreated.size} created, ${manifest.alreadyExisted.size} existing")
+            for (id in manifest.newlyCreated.sorted()) {
+                val text = service.getById(id)?.text() ?: service.getAllEntities()[id]?.text() ?: "<unknown>"
+                println("    + created [$id] $text")
+            }
         }
 
         service.writeToFile(fileName)
