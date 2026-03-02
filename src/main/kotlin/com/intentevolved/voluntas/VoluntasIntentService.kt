@@ -70,6 +70,7 @@ class VoluntasIntentService private constructor(
             val stream = FileInputStream(file).use { Stream.parseFrom(it) }
             val service = VoluntasIntentService(streamId = stream.streamId)
             service.replayStream(stream)
+            service.migrateBootstrap()
             return service
         }
 
@@ -176,6 +177,58 @@ class VoluntasIntentService private constructor(
             .addParticipants(VoluntasIds.NAMES_ROOT)
             .addParticipants(VoluntasIds.META_ROOT)
             .build())
+    }
+
+    /**
+     * Emits any bootstrap entities missing from the stream (migration for old files).
+     * Idempotent: entities that already exist are skipped.
+     * Called by [fromFile] after replaying the stream.
+     */
+    private fun migrateBootstrap() {
+        // Entity 11 = NAME_TYPE
+        if (!byId.containsKey(VoluntasIds.NAME_TYPE)) {
+            emitRelationship(Relationship.newBuilder()
+                .setId(VoluntasIds.NAME_TYPE)
+                .addParticipants(VoluntasIds.DEFINES_TYPE)
+                .build())
+        }
+
+        // Entity 12 = META_ROOT
+        if (!byId.containsKey(VoluntasIds.META_ROOT)) {
+            val metaTextLit = literalStore.getOrCreate("meta")
+            emitRelationship(Relationship.newBuilder()
+                .setId(VoluntasIds.META_ROOT)
+                .addParticipants(VoluntasIds.INSTANTIATES)
+                .addParticipants(VoluntasIds.STRING_INTENT_TYPE)
+                .addParticipants(metaTextLit)
+                .addParticipants(VoluntasIds.ROOT_INTENT)
+                .build())
+        }
+
+        // Entity 13 = NAMES_ROOT
+        if (!byId.containsKey(VoluntasIds.NAMES_ROOT)) {
+            val namesTextLit = literalStore.getOrCreate("names")
+            emitRelationship(Relationship.newBuilder()
+                .setId(VoluntasIds.NAMES_ROOT)
+                .addParticipants(VoluntasIds.INSTANTIATES)
+                .addParticipants(VoluntasIds.NAME_TYPE)
+                .addParticipants(namesTextLit)
+                .addParticipants(VoluntasIds.META_ROOT)
+                .build())
+        }
+
+        // Entity 14 = META_NAME_NODE (/meta name node)
+        if (!byId.containsKey(VoluntasIds.META_NAME_NODE)) {
+            val metaTextLit = literalStore.getOrCreate("meta")
+            emitRelationship(Relationship.newBuilder()
+                .setId(VoluntasIds.META_NAME_NODE)
+                .addParticipants(VoluntasIds.INSTANTIATES)
+                .addParticipants(VoluntasIds.NAME_TYPE)
+                .addParticipants(metaTextLit)
+                .addParticipants(VoluntasIds.NAMES_ROOT)
+                .addParticipants(VoluntasIds.META_ROOT)
+                .build())
+        }
     }
 
     // --- Emit & interpret ---
