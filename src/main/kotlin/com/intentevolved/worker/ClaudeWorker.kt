@@ -80,6 +80,13 @@ fun main(args: Array<String>) {
         println("\nExecuting leaf intents...")
         val summary = intentExecutor.executeAll(pendingLeafIntents, contextMap)
 
+        // Store total token usage on the root task intent (the one passed via --intent)
+        timestampTracker.recordTokenUsage(
+            workerArgs.intentId,
+            summary.totalInputTokens,
+            summary.totalOutputTokens
+        )
+
         // Intent 58: Print summary of executed intents on completion
         println("\n=== Execution Summary ===")
         println("Completed: ${summary.successCount}")
