@@ -229,6 +229,11 @@ message InvokeMacro {
   int64 parent_id = 3;
 }
 
+message WriteNoGarbage {
+  // Path (on the server's filesystem) to write the filtered stream to.
+  string file_path = 1;
+}
+
 message SubmitOpRequest {
   oneof payload {
     CreateIntent create_intent = 1;
@@ -237,6 +242,7 @@ message SubmitOpRequest {
     AddField add_field = 4;
     SetFieldValue set_field_value = 5;
     InvokeMacro invoke_macro = 6;
+    WriteNoGarbage write_no_garbage = 7;
   }
 }
 

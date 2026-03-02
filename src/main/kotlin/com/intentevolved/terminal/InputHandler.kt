@@ -386,32 +386,17 @@ class WriteNoGarbageCommand : Command("write-no-garbage") {
             return CommandResult("write-no-garbage requires a file path")
         }
 
-        val sb = StringBuilder()
-        sb.appendLine("# Runtime State")
-        sb.appendLine()
+        val request = SubmitOpRequest.newBuilder()
+            .setWriteNoGarbage(
+                voluntas.v1.WriteNoGarbage.newBuilder().setFilePath(filePath)
+            )
+            .build()
 
-        fun writeSubtree(intentId: Long, depth: Int) {
-            val scope = stateProvider.getFocalScope(intentId)
-            val intent = scope.focus
-            if (intent.fieldValues()["deleted"] == true) return
-
-            val indent = "  ".repeat(depth)
-            sb.appendLine("$indent- [${intent.id()}] ${intent.text()}")
-            for ((name, value) in intent.fieldValues()) {
-                if (name != "deleted") sb.appendLine("$indent    $name: $value")
-            }
-            for (child in scope.children.filter { !it.isMeta() }) {
-                writeSubtree(child.id(), depth + 1)
-            }
+        return try {
+            consumer.consume(request)
+        } catch (e: IllegalArgumentException) {
+            CommandResult("Error: ${e.message}")
         }
-
-        val rootScope = stateProvider.getFocalScope(0L)
-        for (child in rootScope.children.filter { !it.isMeta() }) {
-            writeSubtree(child.id(), 0)
-        }
-
-        File(filePath).writeText(sb.toString())
-        return CommandResult("Wrote clean state to $filePath")
     }
 }
 

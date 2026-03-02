@@ -1083,6 +1083,56 @@ class VoluntasIntentService private constructor(
         }
     }
 
+    /**
+     * Write a filtered protobuf stream to [fileName], excluding any intent whose
+     * `deleted` field is `true` and all of its descendants.
+     *
+     * Filtering rules (applied per relationship op):
+     *   - Drop the op if the relationship's own entity ID is in the excluded set.
+     *   - Drop SETS_FIELD / DEFINES_FIELD / ADDS_PARTICIPANT ops whose primary
+     *     target (participants[1]) is in the excluded set.
+     *   - All literal ops are kept (they are content-addressed and harmless).
+     */
+    fun writeNoGarbageToFile(fileName: String) {
+        // 1. Find all intents with deleted=true
+        val deletedRoots = byId.entries
+            .filter { (_, intent) -> intent.fieldValues()["deleted"] == true }
+            .map { it.key }
+
+        // 2. Expand to all descendants
+        val excludedIds = mutableSetOf<Long>()
+        fun collectWithDescendants(id: Long) {
+            if (excludedIds.add(id)) {
+                childrenById[id]?.forEach { collectWithDescendants(it) }
+            }
+        }
+        deletedRoots.forEach { collectWithDescendants(it) }
+
+        // 3. Filter ops
+        val filteredOps = ops.filter { op ->
+            if (!op.hasRelationship()) return@filter true   // keep all literals
+            val rel = op.relationship
+            if (rel.id.toLong() in excludedIds) return@filter false
+            val parts = rel.participantsList
+            if (parts.size >= 2) {
+                val target = parts[1].toLong()
+                when (parts[0].toLong()) {
+                    VoluntasIds.SETS_FIELD,
+                    VoluntasIds.DEFINES_FIELD,
+                    VoluntasIds.ADDS_PARTICIPANT -> if (target in excludedIds) return@filter false
+                }
+            }
+            true
+        }
+
+        // 4. Write
+        val streamBuilder = Stream.newBuilder().setStreamId(streamId)
+        streamBuilder.addAllOps(filteredOps)
+        File(fileName).also { it.parentFile?.mkdirs() }.let { file ->
+            FileOutputStream(file).use { streamBuilder.build().writeTo(it) }
+        }
+    }
+
     // --- IntentStreamConsumer implementation ---
 
     override fun consume(request: SubmitOpRequest): CommandResult {
@@ -1132,6 +1182,11 @@ class VoluntasIntentService private constructor(
                 val textLitId = literalStore.getOrCreate(im.textArg)
                 invokeMacro(im.macroEntityId, listOf(textLitId, im.parentId))
                 CommandResult("invoked macro ${im.macroEntityId}")
+            }
+            SubmitOpRequest.PayloadCase.WRITE_NO_GARBAGE -> {
+                val filePath = request.writeNoGarbage.filePath
+                writeNoGarbageToFile(filePath)
+                CommandResult("Wrote clean state to $filePath")
             }
             SubmitOpRequest.PayloadCase.PAYLOAD_NOT_SET, null ->
                 throw IllegalArgumentException("Request has no payload")

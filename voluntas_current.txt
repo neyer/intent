@@ -117,6 +117,21 @@
         1431. Rewrite undelete in GenerateStandardModule.kt using mutationCommand
             completed: 1772466204211609386
             done: true
+    1532. Fix write-no-garbage to output protobuf stream instead of text
+        started: 1772466764218599938
+        input_tokens: 0
+        output_tokens: 0
+        completed: 1772466766409296092
+        done: true
+      1535. Add WriteNoGarbage message to voluntas.proto SubmitOpRequest
+          completed: 1772466764582274140
+          done: true
+      1540. Add writeNoGarbageToFile() with deleted-entity filtering to VoluntasIntentService
+          completed: 1772466765093833237
+          done: true
+      1545. Update WriteNoGarbageCommand to send WriteNoGarbage op via gRPC
+          completed: 1772466765611114406
+          done: true
 1003. Build Tooling to interact with Runtime
   1018. worker bot
   1020. write standard libraries for common paradigms
@@ -212,11 +227,11 @@
                 done: true
             1085. standard.pb is always loaded first so its types are available for the main stream and any other modules
                 done: true
-        1135. this is the first note
     1006. Web interface
       1029. ability for intent ops to define their css rendering styles on the stream
       1037. view on the literal store with reference counts
       1038. ability to see meta-intents
+      1495. make underscores visible
     1028. simple command line tools for sending ops to server
     1136. tooling for working on voluntas
       1137. git hook for regenerating text version of plan on commit
@@ -225,9 +240,5 @@
   1030. basic readme
       done: true
   1033. explanation of reasoning behind references and literal stores
-1124. /standard
-1141. Test intent from CLAUDE.md tools
-    completed: 1772069325873514654
-    done: true
-1224. standard
-1276. software
+1594. software
+1620. standard
