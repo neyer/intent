@@ -13,8 +13,17 @@ fun main() {
         // "note <text>" — creates a visible freeform note under the current focus
         command("note")
 
+        // "undelete" — sets deleted=false on the focused intent
+        mutationCommand("undelete") {
+            defineField("deleted", bool)
+            setField("deleted", false)
+        }
+
         // Builtin commands (hardcoded in CommandExecutor) documented in the intent tree
-        builtinCommands("add", "focus", "up", "update", "move", "do", "write", "import")
+        builtinCommands(
+            "add", "focus", "up", "update", "move", "do", "write", "import",
+            "delete", "write-no-garbage"
+        )
     }
 
     File("modules").mkdirs()

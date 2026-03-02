@@ -127,6 +127,38 @@ class ModuleBuilder(
     }
 
     /**
+     * Define a macro-backed terminal command that mutates the focused intent.
+     *
+     * Unlike [command], this does not create a new visible type. Instead it builds
+     * a macro whose body ops run against the focused intent (available inside the
+     * block as [MutationBuilder.focused]).
+     *
+     * Creates:
+     * - A macro at "[moduleName]/[keyword]" with params `textLit`, `parentId`
+     * - A command annotation that links the macro to the CLI keyword "[keyword]"
+     *
+     * Example:
+     *
+     *     mutationCommand("undelete") {
+     *         defineField("deleted", bool)
+     *         setField("deleted", false)
+     *     }
+     */
+    fun mutationCommand(keyword: String, block: MutationBuilder.() -> Unit) {
+        val builder = MutationBuilder(service)
+        builder.block()
+
+        val macroId = service.defineMacro("$moduleName/$keyword", listOf("textLit", "parentId"))
+        for ((opType, participants) in builder.ops) {
+            service.addMacroOp(macroId, opType, participants)
+        }
+
+        val commandTypeId = ensureMacroCommandType()
+        val annotationId = service.instantiateType(commandTypeId, parentId = macroId)
+        service.setFieldValue(annotationId, "command-name", keyword)
+    }
+
+    /**
      * Document a hardcoded terminal command in the intent tree.
      *
      * Builtin commands are implemented in [CommandExecutor] and don't use macros.
@@ -213,6 +245,64 @@ class TypeBuilder {
     val long: FieldType      get() = FieldType.FIELD_TYPE_INT64
     val float: FieldType     get() = FieldType.FIELD_TYPE_FLOAT
     val double: FieldType    get() = FieldType.FIELD_TYPE_DOUBLE
+    val bool: FieldType      get() = FieldType.FIELD_TYPE_BOOL
+    val timestamp: FieldType get() = FieldType.FIELD_TYPE_TIMESTAMP
+    val intentRef: FieldType get() = FieldType.FIELD_TYPE_INTENT_REF
+}
+
+/**
+ * DSL receiver for declaring macro body ops inside [ModuleBuilder.mutationCommand].
+ *
+ * All ops target the focused intent, available via [focused]. Example:
+ *
+ *     mutationCommand("undelete") {
+ *         defineField("deleted", bool)   // ensure field exists
+ *         setField("deleted", false)     // set value
+ *     }
+ */
+@ModuleDsl
+class MutationBuilder(private val service: VoluntasIntentService) {
+    internal data class MacroOp(val opType: Long, val participants: List<Long>)
+    internal val ops = mutableListOf<MacroOp>()
+
+    /** The focused intent — use as the target in [defineField] and [setField]. */
+    val focused: Long get() = service.paramRef("parentId")
+
+    /**
+     * Emit a [VoluntasIds.DEFINES_FIELD] op on [target] (defaults to [focused]).
+     * Idempotent: re-defining an existing field overwrites the schema entry in-place.
+     */
+    fun defineField(fieldName: String, type: FieldType, target: Long = focused) {
+        val fieldNameLit = service.literalStore.getOrCreate(fieldName)
+        val typeLit = service.literalStore.getOrCreate(VoluntasIntentService.fieldTypeToString(type))
+        ops.add(MacroOp(VoluntasIds.DEFINES_FIELD, listOf(target, fieldNameLit, typeLit)))
+    }
+
+    /**
+     * Emit a [VoluntasIds.SETS_FIELD] op on [target] (defaults to [focused]).
+     */
+    fun setField(fieldName: String, value: Boolean, target: Long = focused) {
+        val fieldNameLit = service.literalStore.getOrCreate(fieldName)
+        val valueLit = service.literalStore.getOrCreate(value)
+        ops.add(MacroOp(VoluntasIds.SETS_FIELD, listOf(target, fieldNameLit, valueLit)))
+    }
+
+    fun setField(fieldName: String, value: String, target: Long = focused) {
+        val fieldNameLit = service.literalStore.getOrCreate(fieldName)
+        val valueLit = service.literalStore.getOrCreate(value)
+        ops.add(MacroOp(VoluntasIds.SETS_FIELD, listOf(target, fieldNameLit, valueLit)))
+    }
+
+    fun setField(fieldName: String, value: Long, target: Long = focused) {
+        val fieldNameLit = service.literalStore.getOrCreate(fieldName)
+        val valueLit = service.literalStore.getOrCreate(value)
+        ops.add(MacroOp(VoluntasIds.SETS_FIELD, listOf(target, fieldNameLit, valueLit)))
+    }
+
+    // Field type shorthand
+    val string: FieldType    get() = FieldType.FIELD_TYPE_STRING
+    val int: FieldType       get() = FieldType.FIELD_TYPE_INT32
+    val long: FieldType      get() = FieldType.FIELD_TYPE_INT64
     val bool: FieldType      get() = FieldType.FIELD_TYPE_BOOL
     val timestamp: FieldType get() = FieldType.FIELD_TYPE_TIMESTAMP
     val intentRef: FieldType get() = FieldType.FIELD_TYPE_INTENT_REF

@@ -260,6 +260,49 @@ class DoCommand : Command("do") {
     }
 }
 
+class DeleteCommand : Command("delete") {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
+        val intentId = args.trim().toLongOrNull()
+            ?: return CommandResult("delete requires an intent id")
+
+        val intent = stateProvider.getById(intentId)
+            ?: return CommandResult("No intent with id $intentId")
+
+        try {
+            if (!intent.fields().containsKey("deleted")) {
+                consumer.consume(
+                    SubmitOpRequest.newBuilder()
+                        .setAddField(
+                            AddField.newBuilder()
+                                .setIntentId(intentId)
+                                .setFieldName("deleted")
+                                .setFieldType(FieldType.FIELD_TYPE_BOOL)
+                        )
+                        .build()
+                )
+            }
+            consumer.consume(
+                SubmitOpRequest.newBuilder()
+                    .setSetFieldValue(
+                        SetFieldValue.newBuilder()
+                            .setIntentId(intentId)
+                            .setFieldName("deleted")
+                            .setBoolValue(true)
+                    )
+                    .build()
+            )
+            return CommandResult("Deleted intent $intentId")
+        } catch (e: IllegalArgumentException) {
+            return CommandResult("Error: ${e.message}")
+        }
+    }
+}
+
 class WriteCommand : Command("write") {
     override fun process(
         args: String,
@@ -328,6 +371,47 @@ class WriteCommand : Command("write") {
 
         File(filePath).writeText(sb.toString())
         return CommandResult("Wrote plan to $filePath")
+    }
+}
+
+class WriteNoGarbageCommand : Command("write-no-garbage") {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
+        val filePath = args.trim()
+        if (filePath.isEmpty()) {
+            return CommandResult("write-no-garbage requires a file path")
+        }
+
+        val sb = StringBuilder()
+        sb.appendLine("# Runtime State")
+        sb.appendLine()
+
+        fun writeSubtree(intentId: Long, depth: Int) {
+            val scope = stateProvider.getFocalScope(intentId)
+            val intent = scope.focus
+            if (intent.fieldValues()["deleted"] == true) return
+
+            val indent = "  ".repeat(depth)
+            sb.appendLine("$indent- [${intent.id()}] ${intent.text()}")
+            for ((name, value) in intent.fieldValues()) {
+                if (name != "deleted") sb.appendLine("$indent    $name: $value")
+            }
+            for (child in scope.children.filter { !it.isMeta() }) {
+                writeSubtree(child.id(), depth + 1)
+            }
+        }
+
+        val rootScope = stateProvider.getFocalScope(0L)
+        for (child in rootScope.children.filter { !it.isMeta() }) {
+            writeSubtree(child.id(), 0)
+        }
+
+        File(filePath).writeText(sb.toString())
+        return CommandResult("Wrote clean state to $filePath")
     }
 }
 
@@ -466,7 +550,9 @@ class CommandExecutor(
         UpCommand(),
         MoveCommand(),
         DoCommand(),
+        DeleteCommand(),
         WriteCommand(),
+        WriteNoGarbageCommand(),
         ImportCommand()
     )
 

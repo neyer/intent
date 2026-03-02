@@ -81,6 +81,42 @@
       1197. Run existing MacroTest suite to confirm macro invocation still works
   1222. make sure you can add multiple parents and the tooling still works with that
   1223. add 'views' as first class concept in the runtime
+  1386. Add delete/undelete/write-no-garbage commands
+      started: 1772465942532429785
+      input_tokens: 0
+      output_tokens: 0
+      completed: 1772466030670200802
+      done: true
+    1389. Builtin delete and write-no-garbage commands in InputHandler
+        completed: 1772466029524262900
+        done: true
+      1391. Add DeleteCommand to InputHandler.kt
+          completed: 1772466027821957054
+          done: true
+      1392. Add WriteNoGarbageCommand to InputHandler.kt
+          completed: 1772466028367761940
+          done: true
+    1390. Undelete macro in standard module
+        completed: 1772466029916521255
+        done: true
+      1393. Define undelete macro in GenerateStandardModule.kt
+          completed: 1772466028748874560
+          done: true
+      1394. Document delete/write-no-garbage as builtins in standard module
+          completed: 1772466029127071755
+          done: true
+      1427. Add mutationCommand to ModuleDsl and use it for undelete
+          started: 1772466203387343794
+          input_tokens: 0
+          output_tokens: 0
+          completed: 1772466205204511169
+          done: true
+        1430. Add mutationCommand and MutationBuilder to ModuleDsl.kt
+            completed: 1772466203826780041
+            done: true
+        1431. Rewrite undelete in GenerateStandardModule.kt using mutationCommand
+            completed: 1772466204211609386
+            done: true
 1003. Build Tooling to interact with Runtime
   1018. worker bot
   1020. write standard libraries for common paradigms
