@@ -234,6 +234,11 @@ message WriteNoGarbage {
   string file_path = 1;
 }
 
+message AddIntentParent {
+  int64 intentId = 1;
+  int64 parentId = 2;
+}
+
 message SubmitOpRequest {
   oneof payload {
     CreateIntent create_intent = 1;
@@ -243,6 +248,7 @@ message SubmitOpRequest {
     SetFieldValue set_field_value = 5;
     InvokeMacro invoke_macro = 6;
     WriteNoGarbage write_no_garbage = 7;
+    AddIntentParent add_intent_parent = 8;
   }
 }
 
@@ -266,12 +272,17 @@ message GetFocalScopeRequest {
   int64 id = 1;
 }
 
+message AncestryPath {
+  repeated IntentProto intents = 1;
+}
+
 message GetFocalScopeResponse {
   bool found = 1;
   IntentProto focus = 2;
   repeated IntentProto ancestry = 3;
   repeated IntentProto children = 4;
   string error = 5;
+  repeated AncestryPath ancestry_paths = 6;
 }
 
 message IntentProto {

@@ -86,15 +86,23 @@ function renderTree(msg) {
     const tree = document.getElementById("intent-tree");
     tree.innerHTML = "";
 
-    // Ancestry - each ancestor indented by its depth
-    if (msg.ancestry) {
-        msg.ancestry.forEach(function (intent, i) {
+    // Ancestry paths - one chain per direct parent
+    const paths = msg.ancestryPaths || (msg.ancestry ? [msg.ancestry] : [[]]);
+    const multiPath = paths.length > 1;
+    paths.forEach(function (path, pathIdx) {
+        if (multiPath) {
+            const sep = document.createElement("div");
+            sep.className = "path-separator";
+            sep.textContent = "--- Path " + (pathIdx + 1) + " ---";
+            tree.appendChild(sep);
+        }
+        path.forEach(function (intent, i) {
             const prefix = " ".repeat(i);
             renderIntentRow(intent, prefix, "ancestor").forEach(function (el) {
                 tree.appendChild(el);
             });
         });
-    }
+    });
 
     // Spacer before focus
     const spacer1 = document.createElement("div");

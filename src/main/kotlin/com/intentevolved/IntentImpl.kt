@@ -15,6 +15,7 @@ class IntentImpl(
     override fun text() = text
     override fun id() = id
     override fun parent() = participantIds.firstOrNull()?.let { stateProvider.getById(it) }
+    override fun parents(): List<Intent> = participantIds.mapNotNull { stateProvider.getById(it) }
     override fun participantIds(): List<Long> = participantIds.toList()
     override fun children(): List<Intent> = listOf()
     override fun createdTimestamp() = createdTimestamp

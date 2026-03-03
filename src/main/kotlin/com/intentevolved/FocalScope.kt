@@ -5,6 +5,7 @@ package com.intentevolved.com.intentevolved
 // along with some immediately relevant intents
 data class FocalScope (
     val focus: Intent,
-    val ancestry: List<Intent>,
+    val ancestry: List<Intent>,            // primary parent chain [root..parent]
+    val ancestryPaths: List<List<Intent>>, // one chain per direct parent
     val children: List<Intent>
 )

@@ -1119,8 +1119,23 @@ class VoluntasIntentService private constructor(
         return FocalScope(
             focus = intent,
             ancestry = intent.getAncestry(),
+            ancestryPaths = intent.getAncestryPaths(),
             children = children
         )
+    }
+
+    /**
+     * Add a secondary parent to an existing intent without replacing the primary parent.
+     * Reuses addParticipant() which appends to participantIds and calls linkChild().
+     */
+    fun addIntentParent(intentId: Long, newParentId: Long) {
+        byId[intentId] ?: throw IllegalArgumentException("No intent with id $intentId")
+        byId[newParentId] ?: throw IllegalArgumentException("No intent with id $newParentId")
+        val existing = byId[intentId] as? IntentImpl
+        if (existing != null && newParentId in existing.participantIds) {
+            throw IllegalArgumentException("Intent $newParentId is already a parent of $intentId")
+        }
+        addParticipant(intentId, newParentId)
     }
 
     override fun getAll(): List<Intent> = byId.values.filter { !it.isMeta() }
@@ -1299,6 +1314,11 @@ class VoluntasIntentService private constructor(
                 val filePath = request.writeNoGarbage.filePath
                 writeNoGarbageToFile(filePath)
                 CommandResult("Wrote clean state to $filePath")
+            }
+            SubmitOpRequest.PayloadCase.ADD_INTENT_PARENT -> {
+                val op = request.addIntentParent
+                addIntentParent(op.intentId, op.parentId)
+                CommandResult("added parent ${op.parentId} to intent ${op.intentId}")
             }
             SubmitOpRequest.PayloadCase.PAYLOAD_NOT_SET, null ->
                 throw IllegalArgumentException("Request has no payload")

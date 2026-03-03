@@ -21,6 +21,9 @@ interface Intent {
     /** Returns the first participant as the primary parent, or null if no participants. */
     fun parent(): Intent?
 
+    /** All participant intents as parents. participantIds()[0] is the primary parent. */
+    fun parents(): List<Intent>
+
     /** The ordered list of participant IDs for this intent. */
     fun participantIds(): List<Long>
 

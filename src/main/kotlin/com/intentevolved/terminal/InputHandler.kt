@@ -3,6 +3,7 @@ package com.intentevolved.com.intentevolved.terminal
 import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
 import voluntas.v1.AddField
+import voluntas.v1.AddIntentParent
 import voluntas.v1.FieldType
 import voluntas.v1.InvokeMacro
 import voluntas.v1.SubmitOpRequest
@@ -374,6 +375,35 @@ class WriteCommand : Command("write") {
     }
 }
 
+class AddParentCommand : Command("add-parent") {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
+        val parts = args.split(" ")
+        if (parts.size != 2)
+            return CommandResult("add-parent requires two ids: <intentId> <parentId>")
+        val intentId = parts[0].toLongOrNull()
+            ?: return CommandResult("Invalid intent id: ${parts[0]}")
+        val parentId = parts[1].toLongOrNull()
+            ?: return CommandResult("Invalid parent id: ${parts[1]}")
+        val request = SubmitOpRequest.newBuilder()
+            .setAddIntentParent(
+                AddIntentParent.newBuilder()
+                    .setIntentId(intentId)
+                    .setParentId(parentId)
+            )
+            .build()
+        return try {
+            consumer.consume(request)
+        } catch (e: IllegalArgumentException) {
+            CommandResult("Error: ${e.message}")
+        }
+    }
+}
+
 class WriteNoGarbageCommand : Command("write-no-garbage") {
     override fun process(
         args: String,
@@ -534,6 +564,7 @@ class CommandExecutor(
         UpdateCommand(),
         UpCommand(),
         MoveCommand(),
+        AddParentCommand(),
         DoCommand(),
         DeleteCommand(),
         WriteCommand(),

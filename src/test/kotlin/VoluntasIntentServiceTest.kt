@@ -1,6 +1,7 @@
 import voluntas.v1.FieldType
 import com.intentevolved.com.intentevolved.Intent
 import com.intentevolved.com.intentevolved.IntentService
+import com.intentevolved.com.intentevolved.getAncestryPaths
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
 import com.intentevolved.com.intentevolved.voluntas.VoluntasStreamConsumer
 import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
@@ -486,5 +487,147 @@ class VoluntasIntentServiceTest {
         // intent should now appear as a child of other in focal scope
         val scope = service.getFocalScope(other.id())
         assertTrue(scope.children.map { it.id() }.contains(intent.id()))
+    }
+
+    // --- addIntentParent tests ---
+
+    @Test
+    fun `addIntentParent appends participant without changing primary parent`() {
+        val parent1 = service.addIntent("Parent 1", parentId = 0)
+        val parent2 = service.addIntent("Parent 2", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent1.id())
+
+        service.addIntentParent(child.id(), parent2.id())
+
+        val result = service.getById(child.id())!!
+        val pids = result.participantIds()
+        assertEquals(2, pids.size)
+        assertEquals(parent1.id(), pids[0], "Primary parent must remain parent1")
+        assertEquals(parent2.id(), pids[1], "parent2 should be appended")
+    }
+
+    @Test
+    fun `addIntentParent appears in childrenById of new parent`() {
+        val parent1 = service.addIntent("Parent 1", parentId = 0)
+        val parent2 = service.addIntent("Parent 2", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent1.id())
+
+        service.addIntentParent(child.id(), parent2.id())
+
+        val scope = service.getFocalScope(parent2.id())
+        assertTrue(scope.children.map { it.id() }.contains(child.id()))
+    }
+
+    @Test
+    fun `addIntentParent throws for duplicate parent`() {
+        val parent = service.addIntent("Parent", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent.id())
+
+        assertThrows(IllegalArgumentException::class.java) {
+            service.addIntentParent(child.id(), parent.id())
+        }
+    }
+
+    @Test
+    fun `addIntentParent throws for unknown intent`() {
+        val parent = service.addIntent("Parent", parentId = 0)
+        assertThrows(IllegalArgumentException::class.java) {
+            service.addIntentParent(9999L, parent.id())
+        }
+    }
+
+    @Test
+    fun `addIntentParent throws for unknown parent`() {
+        val child = service.addIntent("Child", parentId = 0)
+        assertThrows(IllegalArgumentException::class.java) {
+            service.addIntentParent(child.id(), 9999L)
+        }
+    }
+
+    @Test
+    fun `addIntentParent persists across save and reload`(@TempDir tempDir: Path) {
+        val testFile = tempDir.resolve("test_multiparent.pb").toString()
+        val svc = VoluntasIntentService.new("Multi-parent persistence")
+
+        val parent1 = svc.addIntent("Parent 1", parentId = 0)
+        val parent2 = svc.addIntent("Parent 2", parentId = 0)
+        val child = svc.addIntent("Child", parentId = parent1.id())
+
+        svc.addIntentParent(child.id(), parent2.id())
+
+        svc.writeToFile(testFile)
+        val loaded = VoluntasIntentService.fromFile(testFile)
+
+        val loadedChild = loaded.getById(child.id())!!
+        val pids = loadedChild.participantIds()
+        assertEquals(2, pids.size)
+        assertEquals(parent1.id(), pids[0])
+        assertEquals(parent2.id(), pids[1])
+
+        // Both parents should list child in their scope
+        assertTrue(loaded.getFocalScope(parent1.id()).children.map { it.id() }.contains(child.id()))
+        assertTrue(loaded.getFocalScope(parent2.id()).children.map { it.id() }.contains(child.id()))
+    }
+
+    // --- getAncestryPaths tests ---
+
+    @Test
+    fun `getAncestryPaths returns one path for single parent`() {
+        val parent = service.addIntent("Parent", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent.id())
+
+        val paths = service.getById(child.id())!!.getAncestryPaths()
+        assertEquals(1, paths.size)
+        // Path should be [root, parent]
+        assertEquals(2, paths[0].size)
+        assertEquals(0L, paths[0][0].id())
+        assertEquals(parent.id(), paths[0][1].id())
+    }
+
+    @Test
+    fun `getAncestryPaths returns two paths for two parents`() {
+        val parent1 = service.addIntent("Parent 1", parentId = 0)
+        val parent2 = service.addIntent("Parent 2", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent1.id())
+        service.addIntentParent(child.id(), parent2.id())
+
+        val paths = service.getById(child.id())!!.getAncestryPaths()
+        assertEquals(2, paths.size)
+        // Both paths should end with their respective parent
+        val pathEndIds = paths.map { it.last().id() }.toSet()
+        assertTrue(pathEndIds.contains(parent1.id()))
+        assertTrue(pathEndIds.contains(parent2.id()))
+    }
+
+    @Test
+    fun `getAncestryPaths handles intent with no parent`() {
+        val paths = service.getById(0L)!!.getAncestryPaths()
+        assertEquals(1, paths.size)
+        assertEquals(0, paths[0].size)
+    }
+
+    @Test
+    fun `getFocalScope ancestryPaths has correct shape for single parent`() {
+        val parent = service.addIntent("Parent", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent.id())
+
+        val scope = service.getFocalScope(child.id())
+        assertEquals(1, scope.ancestryPaths.size)
+        val path = scope.ancestryPaths[0]
+        assertEquals(parent.id(), path.last().id())
+    }
+
+    @Test
+    fun `getFocalScope ancestryPaths has two paths when two parents`() {
+        val parent1 = service.addIntent("Parent 1", parentId = 0)
+        val parent2 = service.addIntent("Parent 2", parentId = 0)
+        val child = service.addIntent("Child", parentId = parent1.id())
+        service.addIntentParent(child.id(), parent2.id())
+
+        val scope = service.getFocalScope(child.id())
+        assertEquals(2, scope.ancestryPaths.size)
+        val endIds = scope.ancestryPaths.map { it.last().id() }.toSet()
+        assertTrue(endIds.contains(parent1.id()))
+        assertTrue(endIds.contains(parent2.id()))
     }
 }

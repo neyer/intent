@@ -228,6 +228,11 @@ class VoluntasIntentServiceGrpcImpl(
                     .setFound(true)
                     .setFocus(intentToProto(scope.focus))
                     .addAllAncestry(scope.ancestry.map { intentToProto(it) })
+                    .addAllAncestryPaths(scope.ancestryPaths.map { path ->
+                        AncestryPath.newBuilder()
+                            .addAllIntents(path.map { intentToProto(it) })
+                            .build()
+                    })
                     .addAllChildren(scope.children.map { intentToProto(it) })
                     .build()
             } catch (e: Exception) {

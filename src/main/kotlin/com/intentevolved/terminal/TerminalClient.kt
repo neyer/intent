@@ -95,9 +95,16 @@ fun drawFullScreen(screen: Screen, handler: InputHandler, client: IntentGrpcClie
     try {
         val scope = client.getFocalScope(handler.focalIntent)
 
-        scope.ancestry.forEachIndexed { ancestorNo, intent ->
-            val spaces = " ".repeat(ancestorNo)
-            thisRow += renderIntentRow(tg, intent, thisRow, spaces)
+        val paths = scope.ancestryPaths
+        val multiPath = paths.size > 1
+        paths.forEachIndexed { pathIdx, path ->
+            if (multiPath) {
+                tg.putString(0, thisRow, "--- Path ${pathIdx + 1} ---")
+                thisRow++
+            }
+            path.forEachIndexed { i, intent ->
+                thisRow += renderIntentRow(tg, intent, thisRow, " ".repeat(i))
+            }
         }
 
         ++thisRow
@@ -187,9 +194,15 @@ class IntentGrpcClient(
             throw NullPointerException("No intent found with id $id: ${response.error}")
         }
 
+        val ancestryPaths = if (response.ancestryPathsCount > 0) {
+            response.ancestryPathsList.map { path -> path.intentsList.map { IntentProtoWrapper(it) } }
+        } else {
+            listOf(response.ancestryList.map { IntentProtoWrapper(it) })
+        }
         return FocalScope(
             focus = IntentProtoWrapper(response.focus),
             ancestry = response.ancestryList.map { IntentProtoWrapper(it) },
+            ancestryPaths = ancestryPaths,
             children = response.childrenList.map { IntentProtoWrapper(it) }
         )
     }
@@ -213,6 +226,8 @@ class IntentProtoWrapper(
         if (proto.hasLastUpdatedTimestamp()) proto.lastUpdatedTimestamp else null
 
     override fun parent(): Intent? = null  // Not needed for display
+
+    override fun parents(): List<Intent> = emptyList()  // Not needed for display
 
     override fun participantIds(): List<Long> = proto.participantIdsList
 

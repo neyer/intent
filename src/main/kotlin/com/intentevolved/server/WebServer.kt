@@ -222,6 +222,7 @@ private fun buildScopeMessage(
     "result" to result,
     "focus" to scope.focus.toTreeMap(),
     "ancestry" to scope.ancestry.map { it.toTreeMap() },
+    "ancestryPaths" to scope.ancestryPaths.map { path -> path.map { it.toTreeMap() } },
     "children" to scope.children.map { it.toTreeMap() }
 )
 
@@ -233,12 +234,14 @@ private fun buildTreeUpdateMessage(
     "focalIntent" to focalIntent,
     "focus" to scope.focus.toTreeMap(),
     "ancestry" to scope.ancestry.map { it.toTreeMap() },
+    "ancestryPaths" to scope.ancestryPaths.map { path -> path.map { it.toTreeMap() } },
     "children" to scope.children.map { it.toTreeMap() }
 )
 
 fun FocalScope.toApiMap(): Map<String, Any?> = mapOf(
     "focus" to focus.toApiMap(),
     "ancestry" to ancestry.map { it.toApiMap() },
+    "ancestryPaths" to ancestryPaths.map { path -> path.map { it.toApiMap() } },
     "children" to children.map { it.toApiMap() }
 )
 

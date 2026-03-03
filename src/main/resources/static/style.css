@@ -80,3 +80,8 @@ body {
 .tree-spacer {
     height: 8px;
 }
+
+.path-separator {
+    color: #6272a4;
+    font-style: italic;
+}
