@@ -80,280 +80,437 @@
         2013. This file: generates the Voluntas self-describing build plan with full requirement/system/file/class/method hierarchy for every source file
 2081. work with intents over time
   2090. interfaces
-    1609. A gRPC server must expose the full intent tree to any remote client over the network
-      1611. Uses grpc-kotlin-stub for coroutine-friendly server implementations; all state access is serialised through a single-thread Kotlin coroutine dispatcher
-      1613. gRPC server implementation, thread dispatch, and lifecycle management
-        1615. VoluntasRuntime.kt
-          1617. Top-level server process: wires gRPC server, optional Ktor web server, module loading, and shutdown hook; also contains the two gRPC service implementations
-          1619. VoluntasRuntime
-            1621. Orchestrates the full server: builds gRPC Server with both service impls, starts IntentWebServer if webPort is set, loads modules from directory
-            1623. start() — starts gRPC server, calls loadModules(), starts web server if configured, wires broadcast callbacks on both gRPC impls
-            1625. loadModules(dir: String) — scans directory for .pb files sorted by name; loads each via ModuleLoader; logs manifest; warns if no command annotations found
-            1627. stop() — shuts down web server, gRPC server, and state dispatcher in order
-            1629. blockUntilShutdown() — blocks calling thread until gRPC server terminates
-            1631. main(args: Array<String>) — CLI entry: args are port, fileName, webPort, modulesDir; loads stream or creates new; starts server
-          1633. VoluntasIntentServiceGrpcImpl
-            1635. Coroutine gRPC impl for IntentService; all calls run in stateDispatcher for serialised access; triggers onMutation broadcast callback after successful mutations
-            1637. submitOp(request): SubmitOpResponse — routes to service.consume(); saves file; extracts new ID from result message; triggers onMutation
-            1639. getIntent(request): GetIntentResponse — looks up intent by ID; converts to IntentProto via intentToProto()
-            1641. getFocalScope(request): GetFocalScopeResponse — calls service.getFocalScope(); converts focus/ancestry/children to proto
-            1643. getCommands(request): GetCommandsResponse — calls getCommandAnnotations(); returns list of CommandInfo (keyword + macroEntityId)
-            1645. extractIdFromResult(message: String): Long — regex extracts 'intent <N>' from result message to populate SubmitOpResponse.id
-          1647. VoluntasServiceGrpcImpl
-            1649. Coroutine gRPC impl for the raw VoluntasService; provides direct Relationship and Literal submission without high-level routing through SubmitOpRequest
-            1651. submitRelationship(request): SubmitRelationshipResponse — casts service to VoluntasStreamConsumer and calls consume(Relationship)
-            1653. submitLiteral(request): SubmitLiteralResponse — calls service.literalStore.register(literal)
-          1655. intentToProto(intent: Intent): IntentProto — top-level file function; converts Intent including fields, fieldValues (all scalar types), and participantIds
-      1657. gRPC server startup, module loading integration, and all RPC round-trips must be tested
-        1659. VoluntasRuntime integration tests
-          1661. VoluntasRuntimeTest.kt
-            1663. Integration tests: server start/stop, module loading, SubmitOp RPC round-trips, GetFocalScope, GetCommands after module load, WebSocket broadcast trigger
-            1665. VoluntasRuntimeTest
-              1667. testServerStartStop() — server starts and stops cleanly
-              1669. testSubmitOpRoundTrip() — submit CreateIntent op; verify via GetIntent
-              1671. testModuleLoading() — load module; verify types visible via GetFocalScope
-              1673. testGetCommandsAfterModuleLoad() — GetCommands returns module-defined keywords
-    1675. A browser-accessible web interface must allow intent navigation and command entry with real-time push updates
-      1677. Uses Ktor with embedded Netty; REST API for navigation and commands; WebSocket for server-push tree updates to all connected clients
-      1679. Ktor HTTP and WebSocket server with per-session state management
-        1681. WebServer.kt
-          1683. Ktor embedded server exposing a REST API and WebSocket endpoint for the browser-based intent tree UI
-          1685. IntentWebServer
-            1687. Wraps Ktor embeddedServer; manages a SessionManager; exposes broadcastAll() for push updates to all connected WebSocket clients; receives commandAnnotations from VoluntasRuntime
-            1689. start() — starts Ktor embedded Netty server on configured web port
-            1691. stop() — gracefully shuts down Ktor server
-            1693. broadcastAll() — suspending: sends updated scope JSON to all active WebSocket sessions
-            1695. GET /health — returns 200 OK for health checks
-            1697. GET /api/scope/{id} — returns FocalScope JSON for the given intent ID
-            1699. GET /api/intent/{id} — returns a single intent as JSON
-            1701. POST /api/command — parses {sessionId, command} body; routes to session's CommandExecutor; returns result
-            1703. WebSocket /ws — manages session connections; sends current scope on connect; receives scope updates on mutation
-        1705. WebSessionState.kt
-          1707. Per-session state and session lifecycle management for the web interface
-          1709. WebSessionState
-            1711. Data class holding a single web session's CommandExecutor, current focal intent ID, and session identifier string
-            1713. sessionId: String — unique session identifier (e.g. UUID)
-            1715. executor: CommandExecutor — command dispatcher for this session
-            1717. focalIntentId: Long — currently focused intent for this session (mutable)
-          1719. SessionManager
-            1721. ConcurrentHashMap-based registry of all active sessions; creates sessions on first access with module command annotations pre-registered
-            1723. getOrCreate(sessionId: String): WebSessionState — returns existing or creates new session; iterates commandAnnotations; registers DynamicMacroCommand for each
-            1725. registerConnection(sessionId: String, channel: WebSocketChannel) — records a WebSocket channel for push updates
-            1727. removeConnection(sessionId: String) — removes WebSocket channel on disconnect
-            1729. getAllChannels(): List<WebSocketChannel> — returns all active WebSocket channels for broadcast
-        1731. Web session CommandExecutors must include module-defined macro commands so that typed commands work in the browser
-          1733. Without this, the web interface accepts only builtin commands and cannot execute module-defined commands like 'requirement', 'note', etc.
-          1735. Thread command annotations from VoluntasRuntime into every new web session
-            1737. IntentWebServer constructor accepts commandAnnotations: List<Pair<String,Long>>; passes to SessionManager
-            1739. SessionManager stores commandAnnotations; getOrCreate() calls executor.registerCommand(DynamicMacroCommand(keyword, macroId)) for each entry
-            1741. VoluntasRuntime.start() calls service.getCommandAnnotations() after loadModules() finishes and passes the result to IntentWebServer
-      1743. Web server endpoints, session lifecycle, command routing, and WebSocket broadcasting must be tested
-        1745. WebServer unit and integration tests
-          1747. WebServerTest.kt
-            1749. Tests REST endpoints, session creation, POST /api/command execution with module commands, WebSocket message flow, and broadcast on mutation
-            1751. WebServerTest
-              1753. testGetScope() — GET /api/scope/0 returns root scope JSON
-              1755. testPostCommand() — POST /api/command executes a builtin command and returns result
-              1757. testSessionCreation() — getOrCreate produces a valid session with a CommandExecutor
-              1759. testWebSocketBroadcast() — mutation triggers broadcastAll and all clients receive updated scope
-              1761. testModuleCommandsAvailableInSession() — after passing commandAnnotations, session executor has the module commands registered
-    1763. A keyboard-driven terminal interface must allow local interactive use without a browser
-      1765. Built on Lanterna; renders the intent tree with indentation, field values, and ancestry breadcrumbs; connects to a gRPC server
-      1767. Lanterna-based terminal user interface and command processing
-        1769. TerminalClient.kt
-          1771. Lanterna-based TUI application: renders intent tree, shows focal scope, accepts keyboard input, connects to gRPC server on startup
-          1773. TerminalClient
-            1775. Manages Lanterna Screen, render loop, gRPC stubs, and startup command registration via GetCommands RPC
-            1777. start() — initialises Lanterna screen, connects to gRPC, fetches GetCommands, enters render/input loop
-            1779. render(scope: FocalScope) — draws ancestry breadcrumbs, current focus text, children with field values and indentation
-            1781. main(args: Array<String>) — parses host/port args, constructs TerminalClient, calls start()
-        1783. InputHandler.kt
-          1785. Keystroke processing, command registry, and all builtin command implementations for the terminal interface
-          1787. Command
-            1789. Interface for all terminal commands: one execute() method returning a CommandResult
-            1791. execute(input: String, executor: CommandExecutor): CommandResult
-          1793. CommandExecutor
-            1795. Holds the current focal intent ID and a keyword→Command dispatch map; processes parsed command input
-            1797. registerCommand(keyword: String, command: Command) — adds or replaces a command in the dispatch table
-            1799. execute(input: String): CommandResult — splits input into keyword + args; dispatches to matching Command
-            1801. focalIntentId: Long — mutable current focal intent ID; updated by navigation commands
-          1803. InputHandler
-            1805. Wraps Lanterna KeyStroke processing; builds input buffer character by character; on Enter dispatches to executor; handles Backspace and Escape
-            1807. handleKey(key: KeyStroke): CommandResult? — processes one keystroke; returns CommandResult on Enter, null otherwise
-          1809. Builtin command classes
-            1811. One class per builtin terminal command; all implement Command interface
-            1813. AddCommand — submits CreateIntent op with input as text and focal as parent; refocuses on new intent
-            1815. FocusCommand — changes focal intent to the ID given in input
-            1817. UpCommand — moves focus to parent of current focal intent
-            1819. UpdateCommand — submits UpdateIntentText op for the focal intent
-            1821. MoveCommand — submits UpdateIntentParent op to re-parent an intent
-            1823. DoCommand — submits SetFieldValue done=true on the focal intent
-            1825. DeleteCommand — soft-deletes the focused intent
-            1827. WriteCommand — triggers writeToFile on the server
-            1829. WriteNoGarbageCommand — writes stream excluding soft-deleted intents
-            1831. ImportCommand — submits an ImportPlan op to load a .pb file into the running server
-          1833. DynamicMacroCommand
-            1835. Registered at startup for each module-defined command; submits InvokeMacro op with the input as textArg and focal as parent
-            1837. execute(input, executor) — submits InvokeMacro request with input text and current focalIntentId as parent
-      1839. Keystroke handling, command parsing, focal intent navigation, and all builtin command behaviours must be tested
-        1841. InputHandler unit tests
-          1843. InputHandlerTest.kt
-            1845. Tests keystroke buffer management, Enter/Backspace handling, focus/up/add/update commands, and executor dispatch
-            1847. InputHandlerTest
-              1849. testBufferAccumulation() — typing characters builds input buffer correctly
-              1851. testBackspace() — Backspace removes last character from buffer
-              1853. testCommandDispatch() — Enter dispatches to correct registered command
-              1855. testFocusUp() — FocusCommand and UpCommand change focalIntentId correctly
-    1857. Developers must be able to inspect any .pb stream file as a human-readable intent tree from the command line
-      1859. PrintPlan command-line utility
-        1861. PrintPlan.kt
-          1863. Standalone utility: loads a .pb stream file, replays it, and prints the intent tree with indentation and field values to stdout
-          1865. main(args: Array<String>) — takes .pb file path as arg; calls VoluntasIntentService.fromFile(); recursively prints tree from root with depth-based indentation
-    1963. Generate an interactive HTML timeline visualisation from a Voluntas stream file showing execution timing and duration
-      1965. Reads start/end timestamps from intent field values; renders a Gantt-style HTML timeline with depth-based colouring, hover details, and scrollable layout
-      1967. HTML timeline generator from .pb stream files
-        1969. TimelineVisualizer.kt
-          1971. Reads a .pb stream file, extracts timing data from field values, and generates a self-contained HTML page with a Gantt-style execution timeline
-          1973. TimelineVisualizer
-            1975. Processes the intent tree to extract TimelineEntry records; renders scrollable HTML with inline CSS and JavaScript
-            1977. generate(inputFile: String, outputFile: String) — top-level entry: load stream, extract entries, write HTML file
-            1979. extractEntries(service: VoluntasIntentService): List<TimelineEntry> — traverses all intents; reads start_timestamp, end_timestamp, done fields; computes depth
-            1981. generateHtml(entries: List<TimelineEntry>): String — renders the full HTML/CSS/JS Gantt timeline page as a string
-          1983. TimelineEntry
-            1985. Data class for one row in the timeline: id, text, startTime, endTime, computed duration (ms), done flag, and tree depth for visual indentation
-    1867. An autonomous Claude worker must execute leaf intents via the Claude API using tools (read_file, write_file, bash)
-      1869. The worker recursively fetches the intent tree, selects incomplete leaf intents, executes each with Claude, and records timestamps and token counts
-      1871. Worker orchestration, CLI entry point, and gRPC client
-        1873. ClaudeWorker.kt
-          1875. Main entry point for the autonomous worker; parses CLI args, orchestrates the fetch→execute→track loop, writes final token totals to the requirement intent
-          1877. ClaudeWorker
-            1879. Orchestrates the full worker lifecycle: fetch leaf intents → mark each started → execute via Claude API → mark finished → record token counts
-            1881. executeAll(intents: List<IntentProto>) — iterates leaf intents in order; marks start, calls executor, marks finish
-            1883. main(args: Array<String>) — CLI: --server and --intent args; creates gRPC client, fetcher, executor, tracker; calls executeAll(); writes total tokens to requirement intent
-        1885. WorkerGrpcClient.kt
-          1887. gRPC client wrapper used exclusively by the worker; simplifies connection lifecycle and operation submission with typed helper methods
-          1889. WorkerGrpcClient
-            1891. Manages ManagedChannel and gRPC stub lifecycle; all helpers run inside the established channel connection
-            1893. connect() — creates ManagedChannel to the configured server address
-            1895. getIntent(id: Long): IntentProto — fetches a single intent by ID
-            1897. getFocalScope(id: Long): FocalScopeProto — fetches focal scope for navigation and leaf detection
-            1899. submitOp(request: SubmitOpRequest): SubmitOpResponse — submits any high-level op
-            1901. close() — gracefully shuts down the ManagedChannel
-      1903. Recursive intent tree fetching and incomplete leaf selection
-        1905. IntentFetcher.kt
-          1907. Recursively traverses the intent tree via getFocalScope RPCs to collect all incomplete leaf intents for execution
-          1909. IntentFetcher
-            1911. Uses depth-first traversal; a leaf is any intent with no incomplete children; filters out intents with done=true
-            1913. fetchLeaves(intentId: Long): List<IntentProto> — recursively collects all incomplete leaf intents under the given root
-            1915. isLeaf(scope: FocalScopeProto): Boolean — true if intent has no children or all children are already done
-      1917. Intent execution via the Claude API with tool use loop
-        1919. IntentExecutor.kt
-          1921. Executes a single intent by building a Claude prompt from the intent and its ancestors, then running the tool-use loop until Claude stops
-          1923. IntentExecutor
-            1925. Builds a system prompt from intent text and ancestor context; manages the Claude API message loop; processes tool calls (read_file, write_file, bash) until Claude stops with no tool use
-            1927. execute(intent: IntentProto, ancestry: List<IntentProto>): ExecutionResult — main execution: build prompt, start message loop, handle tool calls
-            1929. buildPrompt(intent: IntentProto, ancestry: List<IntentProto>): String — formats intent text + ancestor breadcrumbs into a Claude system prompt
-        1931. ClaudeApiClient.kt
-          1933. Anthropic SDK wrapper: sends messages with tool definitions (read_file, write_file, bash), parses tool_use content blocks, accumulates token counts across all calls
-          1935. ClaudeApiClient
-            1937. Manages the Anthropic client, message history, and running token totals; exposes a simple send/parse API for IntentExecutor
-            1939. sendMessage(messages: List<Message>, tools: List<Tool>): ClaudeResponse — sends to Anthropic API with configured model; accumulates token counts
-            1941. parseToolUseCalls(response): List<ToolUseCall> — extracts all tool_use content blocks from a response
-            1943. totalInputTokens: Long — running total of input tokens across all API calls in this session
-            1945. totalOutputTokens: Long — running total of output tokens across all API calls in this session
-      1947. Timestamp and token-count tracking for executed intents
-        1949. TimestampTracker.kt
-          1951. Records start/end timestamps and Claude API token usage on intent entities via gRPC SetFieldValue ops
-          1953. TimestampTracker
-            1955. Uses the worker gRPC client to write INT64 field values; timestamps are epoch-nanoseconds; token fields match the requirement type's input_tokens/output_tokens fields
-            1957. markIntentStarted(id: Long) — writes start_timestamp field via SetFieldValue op
-            1959. markIntentFinished(id: Long) — writes end_timestamp field
-            1961. recordTokenUsage(id: Long, inputTokens: Long, outputTokens: Long) — writes input_tokens and output_tokens INT64 fields
-    2115. Display intent type in web and terminal clients
-        started: 1772559871000611927
-        input_tokens: 0
-        output_tokens: 0
-        completed: 1772560051361555050
-        done: true
-      2118. Expose typeName on Intent interface and IntentImpl
-          completed: 1772560040788373177
-          done: true
-      2119. Add type_name to IntentProto and intentToProto()
-          completed: 1772560041185260078
-          done: true
-      2120. Update terminal client rendering to show type
-          completed: 1772560041580999172
-          done: true
-      2121. Update web client rendering to show type
-          completed: 1772560041975392389
-          done: true
-      2122. Intent.kt: add typeName() method
-          completed: 1772559920843671670
-          done: true
-      2123. IntentImpl.kt: add typeName constructor param and override
-          completed: 1772559921267155916
-          done: true
-      2124. VoluntasIntentService.kt: compute and set typeName in handleInstantiates, preserve on updates
-          completed: 1772559951240270973
-          done: true
-      2125. voluntas.proto: add optional string type_name to IntentProto
-          completed: 1772559959754082551
-          done: true
-      2126. VoluntasRuntime.kt: populate type_name in intentToProto()
-          completed: 1772559968966632390
-          done: true
-      2127. TerminalClient.kt: implement typeName() in IntentProtoWrapper, update renderIntentRow()
-          completed: 1772559982228680866
-          done: true
-      2128. WebServer.kt: add typeName to toTreeMap()
-          completed: 1772559988924746064
-          done: true
-      2129. main.js: display typeName in renderIntentRow()
-          completed: 1772559996110080674
-          done: true
+    2202. terminal
+      1763. A keyboard-driven terminal interface must allow local interactive use without a browser
+        1765. Built on Lanterna; renders the intent tree with indentation, field values, and ancestry breadcrumbs; connects to a gRPC server
+        1767. Lanterna-based terminal user interface and command processing
+          1769. TerminalClient.kt
+            1771. Lanterna-based TUI application: renders intent tree, shows focal scope, accepts keyboard input, connects to gRPC server on startup
+            1773. TerminalClient
+              1775. Manages Lanterna Screen, render loop, gRPC stubs, and startup command registration via GetCommands RPC
+              1777. start() — initialises Lanterna screen, connects to gRPC, fetches GetCommands, enters render/input loop
+              1779. render(scope: FocalScope) — draws ancestry breadcrumbs, current focus text, children with field values and indentation
+              1781. main(args: Array<String>) — parses host/port args, constructs TerminalClient, calls start()
+          1783. InputHandler.kt
+            1785. Keystroke processing, command registry, and all builtin command implementations for the terminal interface
+            1787. Command
+              1789. Interface for all terminal commands: one execute() method returning a CommandResult
+              1791. execute(input: String, executor: CommandExecutor): CommandResult
+            1793. CommandExecutor
+              1795. Holds the current focal intent ID and a keyword→Command dispatch map; processes parsed command input
+              1797. registerCommand(keyword: String, command: Command) — adds or replaces a command in the dispatch table
+              1799. execute(input: String): CommandResult — splits input into keyword + args; dispatches to matching Command
+              1801. focalIntentId: Long — mutable current focal intent ID; updated by navigation commands
+            1803. InputHandler
+              1805. Wraps Lanterna KeyStroke processing; builds input buffer character by character; on Enter dispatches to executor; handles Backspace and Escape
+              1807. handleKey(key: KeyStroke): CommandResult? — processes one keystroke; returns CommandResult on Enter, null otherwise
+            1809. Builtin command classes
+              1811. One class per builtin terminal command; all implement Command interface
+              1813. AddCommand — submits CreateIntent op with input as text and focal as parent; refocuses on new intent
+              1815. FocusCommand — changes focal intent to the ID given in input
+              1817. UpCommand — moves focus to parent of current focal intent
+              1819. UpdateCommand — submits UpdateIntentText op for the focal intent
+              1821. MoveCommand — submits UpdateIntentParent op to re-parent an intent
+              1823. DoCommand — submits SetFieldValue done=true on the focal intent
+              1825. DeleteCommand — soft-deletes the focused intent
+              1827. WriteCommand — triggers writeToFile on the server
+              1829. WriteNoGarbageCommand — writes stream excluding soft-deleted intents
+              1831. ImportCommand — submits an ImportPlan op to load a .pb file into the running server
+            1833. DynamicMacroCommand
+              1835. Registered at startup for each module-defined command; submits InvokeMacro op with the input as textArg and focal as parent
+              1837. execute(input, executor) — submits InvokeMacro request with input text and current focalIntentId as parent
+        1839. Keystroke handling, command parsing, focal intent navigation, and all builtin command behaviours must be tested
+          1841. InputHandler unit tests
+            1843. InputHandlerTest.kt
+              1845. Tests keystroke buffer management, Enter/Backspace handling, focus/up/add/update commands, and executor dispatch
+              1847. InputHandlerTest
+                1849. testBufferAccumulation() — typing characters builds input buffer correctly
+                1851. testBackspace() — Backspace removes last character from buffer
+                1853. testCommandDispatch() — Enter dispatches to correct registered command
+                1855. testFocusUp() — FocusCommand and UpCommand change focalIntentId correctly
+        2115. Display intent type in web and terminal clients
+            started: 1772559871000611927
+            input_tokens: 0
+            output_tokens: 0
+            completed: 1772560051361555050
+            done: true
+          2118. Expose typeName on Intent interface and IntentImpl
+              completed: 1772560040788373177
+              done: true
+          2119. Add type_name to IntentProto and intentToProto()
+              completed: 1772560041185260078
+              done: true
+          2120. Update terminal client rendering to show type
+              completed: 1772560041580999172
+              done: true
+          2121. Update web client rendering to show type
+              completed: 1772560041975392389
+              done: true
+          2122. Intent.kt: add typeName() method
+              completed: 1772559920843671670
+              done: true
+          2123. IntentImpl.kt: add typeName constructor param and override
+              completed: 1772559921267155916
+              done: true
+          2124. VoluntasIntentService.kt: compute and set typeName in handleInstantiates, preserve on updates
+              completed: 1772559951240270973
+              done: true
+          2125. voluntas.proto: add optional string type_name to IntentProto
+              completed: 1772559959754082551
+              done: true
+          2126. VoluntasRuntime.kt: populate type_name in intentToProto()
+              completed: 1772559968966632390
+              done: true
+          2127. TerminalClient.kt: implement typeName() in IntentProtoWrapper, update renderIntentRow()
+              completed: 1772559982228680866
+              done: true
+          2128. WebServer.kt: add typeName to toTreeMap()
+              completed: 1772559988924746064
+              done: true
+          2129. main.js: display typeName in renderIntentRow()
+              completed: 1772559996110080674
+              done: true
+    2205. browser
+      1675. A browser-accessible web interface must allow intent navigation and command entry with real-time push updates
+        1677. Uses Ktor with embedded Netty; REST API for navigation and commands; WebSocket for server-push tree updates to all connected clients
+        1679. Ktor HTTP and WebSocket server with per-session state management
+          1681. WebServer.kt
+            1683. Ktor embedded server exposing a REST API and WebSocket endpoint for the browser-based intent tree UI
+            1685. IntentWebServer
+              1687. Wraps Ktor embeddedServer; manages a SessionManager; exposes broadcastAll() for push updates to all connected WebSocket clients; receives commandAnnotations from VoluntasRuntime
+              1689. start() — starts Ktor embedded Netty server on configured web port
+              1691. stop() — gracefully shuts down Ktor server
+              1693. broadcastAll() — suspending: sends updated scope JSON to all active WebSocket sessions
+              1695. GET /health — returns 200 OK for health checks
+              1697. GET /api/scope/{id} — returns FocalScope JSON for the given intent ID
+              1699. GET /api/intent/{id} — returns a single intent as JSON
+              1701. POST /api/command — parses {sessionId, command} body; routes to session's CommandExecutor; returns result
+              1703. WebSocket /ws — manages session connections; sends current scope on connect; receives scope updates on mutation
+          1705. WebSessionState.kt
+            1707. Per-session state and session lifecycle management for the web interface
+            1709. WebSessionState
+              1711. Data class holding a single web session's CommandExecutor, current focal intent ID, and session identifier string
+              1713. sessionId: String — unique session identifier (e.g. UUID)
+              1715. executor: CommandExecutor — command dispatcher for this session
+              1717. focalIntentId: Long — currently focused intent for this session (mutable)
+            1719. SessionManager
+              1721. ConcurrentHashMap-based registry of all active sessions; creates sessions on first access with module command annotations pre-registered
+              1723. getOrCreate(sessionId: String): WebSessionState — returns existing or creates new session; iterates commandAnnotations; registers DynamicMacroCommand for each
+              1725. registerConnection(sessionId: String, channel: WebSocketChannel) — records a WebSocket channel for push updates
+              1727. removeConnection(sessionId: String) — removes WebSocket channel on disconnect
+              1729. getAllChannels(): List<WebSocketChannel> — returns all active WebSocket channels for broadcast
+          1731. Web session CommandExecutors must include module-defined macro commands so that typed commands work in the browser
+            1733. Without this, the web interface accepts only builtin commands and cannot execute module-defined commands like 'requirement', 'note', etc.
+            1735. Thread command annotations from VoluntasRuntime into every new web session
+              1737. IntentWebServer constructor accepts commandAnnotations: List<Pair<String,Long>>; passes to SessionManager
+              1739. SessionManager stores commandAnnotations; getOrCreate() calls executor.registerCommand(DynamicMacroCommand(keyword, macroId)) for each entry
+              1741. VoluntasRuntime.start() calls service.getCommandAnnotations() after loadModules() finishes and passes the result to IntentWebServer
+        1743. Web server endpoints, session lifecycle, command routing, and WebSocket broadcasting must be tested
+          1745. WebServer unit and integration tests
+            1747. WebServerTest.kt
+              1749. Tests REST endpoints, session creation, POST /api/command execution with module commands, WebSocket message flow, and broadcast on mutation
+              1751. WebServerTest
+                1753. testGetScope() — GET /api/scope/0 returns root scope JSON
+                1755. testPostCommand() — POST /api/command executes a builtin command and returns result
+                1757. testSessionCreation() — getOrCreate produces a valid session with a CommandExecutor
+                1759. testWebSocketBroadcast() — mutation triggers broadcastAll and all clients receive updated scope
+                1761. testModuleCommandsAvailableInSession() — after passing commandAnnotations, session executor has the module commands registered
+        2115. Display intent type in web and terminal clients
+            started: 1772559871000611927
+            input_tokens: 0
+            output_tokens: 0
+            completed: 1772560051361555050
+            done: true
+          2118. Expose typeName on Intent interface and IntentImpl
+              completed: 1772560040788373177
+              done: true
+          2119. Add type_name to IntentProto and intentToProto()
+              completed: 1772560041185260078
+              done: true
+          2120. Update terminal client rendering to show type
+              completed: 1772560041580999172
+              done: true
+          2121. Update web client rendering to show type
+              completed: 1772560041975392389
+              done: true
+          2122. Intent.kt: add typeName() method
+              completed: 1772559920843671670
+              done: true
+          2123. IntentImpl.kt: add typeName constructor param and override
+              completed: 1772559921267155916
+              done: true
+          2124. VoluntasIntentService.kt: compute and set typeName in handleInstantiates, preserve on updates
+              completed: 1772559951240270973
+              done: true
+          2125. voluntas.proto: add optional string type_name to IntentProto
+              completed: 1772559959754082551
+              done: true
+          2126. VoluntasRuntime.kt: populate type_name in intentToProto()
+              completed: 1772559968966632390
+              done: true
+          2127. TerminalClient.kt: implement typeName() in IntentProtoWrapper, update renderIntentRow()
+              completed: 1772559982228680866
+              done: true
+          2128. WebServer.kt: add typeName to toTreeMap()
+              completed: 1772559988924746064
+              done: true
+          2129. main.js: display typeName in renderIntentRow()
+              completed: 1772559996110080674
+              done: true
+    2208. grpc
+      1609. A gRPC server must expose the full intent tree to any remote client over the network
+        1611. Uses grpc-kotlin-stub for coroutine-friendly server implementations; all state access is serialised through a single-thread Kotlin coroutine dispatcher
+        1613. gRPC server implementation, thread dispatch, and lifecycle management
+          1615. VoluntasRuntime.kt
+            1617. Top-level server process: wires gRPC server, optional Ktor web server, module loading, and shutdown hook; also contains the two gRPC service implementations
+            1619. VoluntasRuntime
+              1621. Orchestrates the full server: builds gRPC Server with both service impls, starts IntentWebServer if webPort is set, loads modules from directory
+              1623. start() — starts gRPC server, calls loadModules(), starts web server if configured, wires broadcast callbacks on both gRPC impls
+              1625. loadModules(dir: String) — scans directory for .pb files sorted by name; loads each via ModuleLoader; logs manifest; warns if no command annotations found
+              1627. stop() — shuts down web server, gRPC server, and state dispatcher in order
+              1629. blockUntilShutdown() — blocks calling thread until gRPC server terminates
+              1631. main(args: Array<String>) — CLI entry: args are port, fileName, webPort, modulesDir; loads stream or creates new; starts server
+            1633. VoluntasIntentServiceGrpcImpl
+              1635. Coroutine gRPC impl for IntentService; all calls run in stateDispatcher for serialised access; triggers onMutation broadcast callback after successful mutations
+              1637. submitOp(request): SubmitOpResponse — routes to service.consume(); saves file; extracts new ID from result message; triggers onMutation
+              1639. getIntent(request): GetIntentResponse — looks up intent by ID; converts to IntentProto via intentToProto()
+              1641. getFocalScope(request): GetFocalScopeResponse — calls service.getFocalScope(); converts focus/ancestry/children to proto
+              1643. getCommands(request): GetCommandsResponse — calls getCommandAnnotations(); returns list of CommandInfo (keyword + macroEntityId)
+              1645. extractIdFromResult(message: String): Long — regex extracts 'intent <N>' from result message to populate SubmitOpResponse.id
+            1647. VoluntasServiceGrpcImpl
+              1649. Coroutine gRPC impl for the raw VoluntasService; provides direct Relationship and Literal submission without high-level routing through SubmitOpRequest
+              1651. submitRelationship(request): SubmitRelationshipResponse — casts service to VoluntasStreamConsumer and calls consume(Relationship)
+              1653. submitLiteral(request): SubmitLiteralResponse — calls service.literalStore.register(literal)
+            1655. intentToProto(intent: Intent): IntentProto — top-level file function; converts Intent including fields, fieldValues (all scalar types), and participantIds
+        1657. gRPC server startup, module loading integration, and all RPC round-trips must be tested
+          1659. VoluntasRuntime integration tests
+            1661. VoluntasRuntimeTest.kt
+              1663. Integration tests: server start/stop, module loading, SubmitOp RPC round-trips, GetFocalScope, GetCommands after module load, WebSocket broadcast trigger
+              1665. VoluntasRuntimeTest
+                1667. testServerStartStop() — server starts and stops cleanly
+                1669. testSubmitOpRoundTrip() — submit CreateIntent op; verify via GetIntent
+                1671. testModuleLoading() — load module; verify types visible via GetFocalScope
+                1673. testGetCommandsAfterModuleLoad() — GetCommands returns module-defined keywords
+    2214. cli tools
+      1857. Developers must be able to inspect any .pb stream file as a human-readable intent tree from the command line
+        1859. PrintPlan command-line utility
+          1861. PrintPlan.kt
+            1863. Standalone utility: loads a .pb stream file, replays it, and prints the intent tree with indentation and field values to stdout
+            1865. main(args: Array<String>) — takes .pb file path as arg; calls VoluntasIntentService.fromFile(); recursively prints tree from root with depth-based indentation
+      1963. Generate an interactive HTML timeline visualisation from a Voluntas stream file showing execution timing and duration
+        1965. Reads start/end timestamps from intent field values; renders a Gantt-style HTML timeline with depth-based colouring, hover details, and scrollable layout
+        1967. HTML timeline generator from .pb stream files
+          1969. TimelineVisualizer.kt
+            1971. Reads a .pb stream file, extracts timing data from field values, and generates a self-contained HTML page with a Gantt-style execution timeline
+            1973. TimelineVisualizer
+              1975. Processes the intent tree to extract TimelineEntry records; renders scrollable HTML with inline CSS and JavaScript
+              1977. generate(inputFile: String, outputFile: String) — top-level entry: load stream, extract entries, write HTML file
+              1979. extractEntries(service: VoluntasIntentService): List<TimelineEntry> — traverses all intents; reads start_timestamp, end_timestamp, done fields; computes depth
+              1981. generateHtml(entries: List<TimelineEntry>): String — renders the full HTML/CSS/JS Gantt timeline page as a string
+            1983. TimelineEntry
+              1985. Data class for one row in the timeline: id, text, startTime, endTime, computed duration (ms), done flag, and tree depth for visual indentation
+    2219. claude worker
+      1867. An autonomous Claude worker must execute leaf intents via the Claude API using tools (read_file, write_file, bash)
+        1869. The worker recursively fetches the intent tree, selects incomplete leaf intents, executes each with Claude, and records timestamps and token counts
+        1871. Worker orchestration, CLI entry point, and gRPC client
+          1873. ClaudeWorker.kt
+            1875. Main entry point for the autonomous worker; parses CLI args, orchestrates the fetch→execute→track loop, writes final token totals to the requirement intent
+            1877. ClaudeWorker
+              1879. Orchestrates the full worker lifecycle: fetch leaf intents → mark each started → execute via Claude API → mark finished → record token counts
+              1881. executeAll(intents: List<IntentProto>) — iterates leaf intents in order; marks start, calls executor, marks finish
+              1883. main(args: Array<String>) — CLI: --server and --intent args; creates gRPC client, fetcher, executor, tracker; calls executeAll(); writes total tokens to requirement intent
+          1885. WorkerGrpcClient.kt
+            1887. gRPC client wrapper used exclusively by the worker; simplifies connection lifecycle and operation submission with typed helper methods
+            1889. WorkerGrpcClient
+              1891. Manages ManagedChannel and gRPC stub lifecycle; all helpers run inside the established channel connection
+              1893. connect() — creates ManagedChannel to the configured server address
+              1895. getIntent(id: Long): IntentProto — fetches a single intent by ID
+              1897. getFocalScope(id: Long): FocalScopeProto — fetches focal scope for navigation and leaf detection
+              1899. submitOp(request: SubmitOpRequest): SubmitOpResponse — submits any high-level op
+              1901. close() — gracefully shuts down the ManagedChannel
+        1903. Recursive intent tree fetching and incomplete leaf selection
+          1905. IntentFetcher.kt
+            1907. Recursively traverses the intent tree via getFocalScope RPCs to collect all incomplete leaf intents for execution
+            1909. IntentFetcher
+              1911. Uses depth-first traversal; a leaf is any intent with no incomplete children; filters out intents with done=true
+              1913. fetchLeaves(intentId: Long): List<IntentProto> — recursively collects all incomplete leaf intents under the given root
+              1915. isLeaf(scope: FocalScopeProto): Boolean — true if intent has no children or all children are already done
+        1917. Intent execution via the Claude API with tool use loop
+          1919. IntentExecutor.kt
+            1921. Executes a single intent by building a Claude prompt from the intent and its ancestors, then running the tool-use loop until Claude stops
+            1923. IntentExecutor
+              1925. Builds a system prompt from intent text and ancestor context; manages the Claude API message loop; processes tool calls (read_file, write_file, bash) until Claude stops with no tool use
+              1927. execute(intent: IntentProto, ancestry: List<IntentProto>): ExecutionResult — main execution: build prompt, start message loop, handle tool calls
+              1929. buildPrompt(intent: IntentProto, ancestry: List<IntentProto>): String — formats intent text + ancestor breadcrumbs into a Claude system prompt
+          1931. ClaudeApiClient.kt
+            1933. Anthropic SDK wrapper: sends messages with tool definitions (read_file, write_file, bash), parses tool_use content blocks, accumulates token counts across all calls
+            1935. ClaudeApiClient
+              1937. Manages the Anthropic client, message history, and running token totals; exposes a simple send/parse API for IntentExecutor
+              1939. sendMessage(messages: List<Message>, tools: List<Tool>): ClaudeResponse — sends to Anthropic API with configured model; accumulates token counts
+              1941. parseToolUseCalls(response): List<ToolUseCall> — extracts all tool_use content blocks from a response
+              1943. totalInputTokens: Long — running total of input tokens across all API calls in this session
+              1945. totalOutputTokens: Long — running total of output tokens across all API calls in this session
+        1947. Timestamp and token-count tracking for executed intents
+          1949. TimestampTracker.kt
+            1951. Records start/end timestamps and Claude API token usage on intent entities via gRPC SetFieldValue ops
+            1953. TimestampTracker
+              1955. Uses the worker gRPC client to write INT64 field values; timestamps are epoch-nanoseconds; token fields match the requirement type's input_tokens/output_tokens fields
+              1957. markIntentStarted(id: Long) — writes start_timestamp field via SetFieldValue op
+              1959. markIntentFinished(id: Long) — writes end_timestamp field
+              1961. recordTokenUsage(id: Long, inputTokens: Long, outputTokens: Long) — writes input_tokens and output_tokens INT64 fields
   2105. internals
-    1419. All state changes must be persisted as an append-only protobuf stream fully replayable from disk
-      1421. The stream is a sequence of Op messages (Relationship | Literal); replay rebuilds the entire in-memory state; no separate database is needed
-      1423. Protobuf wire format and stream serialisation
-        1425. voluntas.proto defines all wire types; writeToFile/fromFile in VoluntasIntentService handle serialisation/deserialisation
-        1427. voluntas.proto
-          1429. Protocol Buffer schema: stream wire format, gRPC service definitions, and all message types consumed by clients
-          1431. Stream messages
-            1433. Literal (id, oneof value), Relationship (id, participants list), Op (oneof Relationship | Literal), Stream (repeated Op)
-          1435. Intent domain messages
-            1437. IntentProto (id, text, isMeta, fields, fieldValues, participantIds, timestamps), FieldDetailsProto, FieldValueProto (oneof scalar types)
-          1439. SubmitOpRequest and payload types
-            1441. SubmitOpRequest with oneof payload: CreateIntent, UpdateIntentText, UpdateIntentParent, AddField, SetFieldValue, InvokeMacro, WriteNoGarbage
-          1443. gRPC service definitions
-            1445. IntentService: SubmitOp, GetIntent, GetFocalScope, GetCommands RPCs; VoluntasService: SubmitRelationship, SubmitLiteral RPCs
-        1447. writeToFile(fileName) lives in VoluntasIntentService: serialises ops list to Stream proto, writes to file
-        1449. fromFile(fileName) lives in VoluntasIntentService: parses Stream proto, calls replayStream(), calls migrateBootstrap()
-    1557. Macros must let modules define reusable parameterised command templates that expand into relationship ops at invocation time
-      1559. Macros are defined as DEFINES_MACRO relationships; body ops are appended via DEFINES_MACRO_OP; invocation via INVOKES_MACRO substitutes positional or named param refs
-      1561. Macro definition, body ops, and runtime expansion in VoluntasIntentService
-        1563. All macro logic lives in VoluntasIntentService.kt; see the 'Macro system methods' class group under the backend requirement for method details
-        1565. MacroDef data class: macroId, name, paramNames list, ops list (each op is a list of participant Long IDs)
-        1567. Param refs are encoded as special literal IDs: getLiteralId("$name") or getLiteralId("$0") for positional
-        1569. handleInvokesMacro() substitutes all param refs with actual argument literal IDs before emitting each body op
-      1571. Macro definition and invocation with positional and named parameter binding must be tested
-        1573. Macro unit tests
-          1575. MacroTest.kt
-            1577. Tests macro definition, positional and named param refs, and DEFINES_FIELD/SETS_FIELD ops inside macro bodies
-            1579. MacroTest
-              1581. testMacroDefinition() — macro is registered and retrievable by name after definition
-              1583. testPositionalParams() — $0 and $1 substitution replaces correct arg values
-              1585. testNamedParams() — $name substitution replaces correct named arg values
-              1587. testFieldOpMacro() — DEFINES_FIELD and SETS_FIELD ops work correctly inside an expanded macro
-    1589. Commands defined in modules must be discoverable at runtime and automatically registered in every client interface
-      1591. command() in the DSL creates an instance of '[module]/interface/command' type as a child of each macro entity; getCommandAnnotations() scans for these and returns (keyword, macroId) pairs
-      1593. Command annotation type, scanning, and registration in all client interfaces
-        1595. Three client integration points: terminal (startup GetCommands RPC), web session manager (getOrCreate), and VoluntasRuntime (threads annotations from service to web server constructor)
-        1597. DSL: ensureMacroCommandType() creates '[module]/interface/command' type with required 'command-name' STRING field if not yet present
-        1599. DSL: command()/mutationCommand() instantiate the command type as a child of the macro and set 'command-name' to the keyword
-        1601. VoluntasIntentService.getCommandAnnotations() scans byId for types whose text() ends with '/interface/command'; returns (keyword, macroEntityId) pairs
-        1603. TerminalClient calls GetCommands gRPC on startup; registers a DynamicMacroCommand for each (keyword, macroId) pair
-        1605. SessionManager.getOrCreate() iterates commandAnnotations list; calls executor.registerCommand(DynamicMacroCommand(keyword, macroId))
-        1607. VoluntasRuntime.start() passes service.getCommandAnnotations() to IntentWebServer constructor after loadModules()
+    2228. runtime
+      2240. listens on external ports, takes requests and passes them to runtime
+    2231. service
+      2237. processes events one at a time and updates application state
+      2246. bootstrap
+      2249. event handling
+        1557. Macros must let modules define reusable parameterised command templates that expand into relationship ops at invocation time
+          1559. Macros are defined as DEFINES_MACRO relationships; body ops are appended via DEFINES_MACRO_OP; invocation via INVOKES_MACRO substitutes positional or named param refs
+          1561. Macro definition, body ops, and runtime expansion in VoluntasIntentService
+            1563. All macro logic lives in VoluntasIntentService.kt; see the 'Macro system methods' class group under the backend requirement for method details
+            1565. MacroDef data class: macroId, name, paramNames list, ops list (each op is a list of participant Long IDs)
+            1567. Param refs are encoded as special literal IDs: getLiteralId("$name") or getLiteralId("$0") for positional
+            1569. handleInvokesMacro() substitutes all param refs with actual argument literal IDs before emitting each body op
+          1571. Macro definition and invocation with positional and named parameter binding must be tested
+            1573. Macro unit tests
+              1575. MacroTest.kt
+                1577. Tests macro definition, positional and named param refs, and DEFINES_FIELD/SETS_FIELD ops inside macro bodies
+                1579. MacroTest
+                  1581. testMacroDefinition() — macro is registered and retrievable by name after definition
+                  1583. testPositionalParams() — $0 and $1 substitution replaces correct arg values
+                  1585. testNamedParams() — $name substitution replaces correct named arg values
+                  1587. testFieldOpMacro() — DEFINES_FIELD and SETS_FIELD ops work correctly inside an expanded macro
+        1419. All state changes must be persisted as an append-only protobuf stream fully replayable from disk
+          1423. Protobuf wire format and stream serialisation
+            1425. voluntas.proto defines all wire types; writeToFile/fromFile in VoluntasIntentService handle serialisation/deserialisation
+            1427. voluntas.proto
+              1429. Protocol Buffer schema: stream wire format, gRPC service definitions, and all message types consumed by clients
+              1431. Stream messages
+                1433. Literal (id, oneof value), Relationship (id, participants list), Op (oneof Relationship | Literal), Stream (repeated Op)
+              1435. Intent domain messages
+                1437. IntentProto (id, text, isMeta, fields, fieldValues, participantIds, timestamps), FieldDetailsProto, FieldValueProto (oneof scalar types)
+              1439. SubmitOpRequest and payload types
+                1441. SubmitOpRequest with oneof payload: CreateIntent, UpdateIntentText, UpdateIntentParent, AddField, SetFieldValue, InvokeMacro, WriteNoGarbage
+              1443. gRPC service definitions
+                1445. IntentService: SubmitOp, GetIntent, GetFocalScope, GetCommands RPCs; VoluntasService: SubmitRelationship, SubmitLiteral RPCs
+            1447. writeToFile(fileName) lives in VoluntasIntentService: serialises ops list to Stream proto, writes to file
+            1449. fromFile(fileName) lives in VoluntasIntentService: parses Stream proto, calls replayStream(), calls migrateBootstrap()
+        1421. The stream is a sequence of Op messages (Relationship | Literal); replay rebuilds the entire in-memory state; no separate database is needed
+      2253. module loading
+        1589. Commands defined in modules must be discoverable at runtime and automatically registered in every client interface
+          1591. command() in the DSL creates an instance of '[module]/interface/command' type as a child of each macro entity; getCommandAnnotations() scans for these and returns (keyword, macroId) pairs
+          1593. Command annotation type, scanning, and registration in all client interfaces
+            1595. Three client integration points: terminal (startup GetCommands RPC), web session manager (getOrCreate), and VoluntasRuntime (threads annotations from service to web server constructor)
+            1597. DSL: ensureMacroCommandType() creates '[module]/interface/command' type with required 'command-name' STRING field if not yet present
+            1599. DSL: command()/mutationCommand() instantiate the command type as a child of the macro and set 'command-name' to the keyword
+            1601. VoluntasIntentService.getCommandAnnotations() scans byId for types whose text() ends with '/interface/command'; returns (keyword, macroEntityId) pairs
+            1603. TerminalClient calls GetCommands gRPC on startup; registers a DynamicMacroCommand for each (keyword, macroId) pair
+            1605. SessionManager.getOrCreate() iterates commandAnnotations list; calls executor.registerCommand(DynamicMacroCommand(keyword, macroId))
+            1607. VoluntasRuntime.start() passes service.getCommandAnnotations() to IntentWebServer constructor after loadModules()
+      1213. Store and replay the intent tree as an append-only protobuf relationship-graph stream
+        1217. Voluntas relationship-graph backend (Protobuf-based event store)
+          1219. Low-level event-sourced storage engine: relationships, literals, bootstrap IDs, and the main replay and mutation loop
+          1221. VoluntasIds.kt
+            1223. Compile-time constants for all bootstrap entity IDs (0–14); these IDs are stable across all stream files — changing them would corrupt existing data
+            1225. VoluntasIds
+              1227. Object with named Long constants for every bootstrap relationship type, meta entity, and structural node
+              1229. DEFINES_TYPE = 1L — relationship op: entity A defines a new type identified as B
+              1231. DEFINES_FIELD = 2L — relationship op: type A declares a field with name literal B and type-ref C
+              1233. INSTANTIATES = 3L — relationship op: entity A is an instance of type B with text literal C under parent D
+              1235. SETS_FIELD = 4L — relationship op: sets field B of entity A to value literal C
+              1237. ADDS_PARTICIPANT = 5L — relationship op: appends a participant to entity A
+              1239. DEFINES_MACRO = 6L — relationship op: entity A is a macro with name literal B and param-names literal C
+              1241. STRING_INTENT_TYPE = 7L — the base string/text type; all visible intents instantiate this or a subtype of it
+              1243. DEFINES_MACRO_OP = 9L — relationship op: appends one body step to macro A's op list
+              1245. INVOKES_MACRO = 10L — relationship op: invokes macro A with arg list literal B under parent C
+              1247. NAME_TYPE = 11L — the type for name-path namespace nodes
+              1249. META_ROOT = 12L — root of the meta (type/macro) subtree, parent of all type entities
+              1251. NAMES_ROOT = 13L — root of the name-path namespace
+              1253. META_NAME_NODE = 14L — name node entity for the meta root
+              1255. FIRST_USER_ENTITY = 1000L — first entity ID available for user and module allocation
+          1257. VoluntasIntentService.kt
+            1259. Central service class: holds the live in-memory state, implements IntentService + IntentStreamConsumer + VoluntasStreamConsumer, orchestrates all replay and mutation
+            1261. VoluntasIntentService
+              1263. Full implementation of IntentService; maintains byId map, instancesByType, literalStore, name-path namespace maps, and macro registry
+            1265. Factory and lifecycle methods
+              1267. Static factory methods and stream load/replay entry points
+              1269. new(rootText: String): VoluntasIntentService — creates a fresh stream with bootstrap ops and the given root intent
+              1271. fromFile(fileName: String): VoluntasIntentService — parses stream from disk, replays ops, calls migrateBootstrap()
+              1273. fromStream(stream: Stream): VoluntasIntentService — replays an in-memory Stream proto (used by ModuleLoader)
+              1275. replayStream(stream: Stream) — iterates all Ops and dispatches to processRelationship() or literalStore.register()
+              1277. processRelationship(rel: Relationship) — routes a single Relationship op to the appropriate handler by op type
+            1279. Bootstrap and name-path namespace methods
+              1281. Emit and migrate the well-known bootstrap entities; maintain the '/segment/segment' path namespace for types and macros
+              1283. emitBootstrap() — emits Relationship ops for bootstrap IDs 1–14 into a brand-new stream
+              1285. migrateBootstrap() — idempotently emits any missing bootstrap entities when loading an older stream file
+              1287. handleInstantiatesNameNode(rel) — updates nameNodeToPath, namesByPath, nameNodeByReferent maps from a NAME_TYPE instantiation
+              1289. findOrCreateNameNode(path: String): Long — ensures the full '/a/b/c' path chain exists; creates missing nodes
+              1291. getNamePath(entityId: Long): String? — returns the string path for an entity that has a name node
+              1293. getNameNodeByPath(path: String): Long? — returns the entity ID whose name node has the given path
+              1295. getNameNodePath(nameNodeId: Long): String? — returns path for a name-node entity directly
+            1297. Mutation methods
+              1299. All methods that emit new Relationship ops and update in-memory state
+              1301. addIntent(text: String, parentId: Long): Intent — creates a STRING_INTENT_TYPE intent; emits INSTANTIATES op
+              1303. addIntentOfType(typeId: Long, text: String, parentId: Long): Intent — creates a typed intent; emits INSTANTIATES with given typeId
+              1305. edit(id: Long, newText: String): CommandResult — emits SETS_FIELD for the text literal; updates byId
+              1307. moveParent(id: Long, newParentId: Long): CommandResult — emits SETS_FIELD for parent; updates parent/child maps
+              1309. deleteIntent(id: Long): CommandResult — soft-deletes: sets deleted=true field
+              1311. emitRelationship(rel: Relationship) — appends to ops list and calls processRelationship()
+            1313. Query methods
+              1315. Read-only access to in-memory state; no side effects
+              1317. getById(id: Long): Intent? — looks up by entity ID in byId map; returns null if not found
+              1319. getAll(): List<Intent> — all non-meta intents visible to users
+              1321. getAllEntities(): Map<Long, Intent> — entire byId map including meta entities (types, macros, name nodes)
+              1323. getInstancesOfType(typeId: Long): List<Long> — returns entity IDs of all instances of the given type
+              1325. getFocalScope(id: Long): FocalScope — constructs FocalScope with focus, ancestry chain, and direct children
+              1327. getCommandAnnotations(): List<Pair<String,Long>> — scans byId for '/interface/command' type instances; returns (keyword, macroEntityId) pairs
+            1329. Macro system methods
+              1331. Define, store, and expand parameterised command templates at invocation time
+              1333. defineMacro(name: String, params: List<String>): Long — registers DEFINES_MACRO relationship; stores MacroDef in macros map; creates name node
+              1335. addMacroOp(macroId: Long, opType: Long, participants: List<Long>) — appends a DEFINES_MACRO_OP body step; validates param refs at definition time
+              1337. handleInvokesMacro(macroId: Long, args: List<Long>, parentId: Long) — expands macro: substitutes $name/$index param refs with actual arg literal IDs, emits each body op
+              1339. paramRef(name: String): Long — returns a literal ID encoding a '$name' substitution placeholder for use in macro body ops
+              1341. getMacroByName(name: String): MacroDef? — looks up a macro by name path; used by ModuleLoader and command annotation scanning
+            1343. SubmitOpRequest dispatch
+              1345. Implements IntentStreamConsumer.consume(): routes each SubmitOpRequest payload variant to the appropriate mutation method
+              1347. consume(request: SubmitOpRequest): CommandResult — dispatches oneof payload: CreateIntent, UpdateIntentText, UpdateIntentParent, AddField, SetFieldValue, InvokeMacro, WriteNoGarbage
+          1349. LiteralStore.kt
+            1351. Content-addressed literal storage: each unique value gets a stable ID (Long.MIN_VALUE | ordinal); the same value always maps to the same ID regardless of when it was first stored
+            1353. LiteralStore
+              1355. Manages bidirectional maps between literal IDs and values; supports String, Long, Double, Boolean, ByteArray; IDs set the high bit (Long.MIN_VALUE | ordinal)
+              1357. getOrCreate(value: String): Long — returns existing or allocates new literal ID for the string
+              1359. getOrCreate(value: Long): Long — for 64-bit integer literals
+              1361. getOrCreate(value: Double): Long — for floating-point literals
+              1363. getOrCreate(value: Boolean): Long — for boolean literals
+              1365. getOrCreate(value: ByteArray): Long — for raw byte array literals
+              1367. register(literal: Literal) — loads a proto Literal message during stream replay; populates both forward and reverse maps
+              1369. getValue(id: Long): Any? — retrieves the stored value for a literal ID; returns null if not registered
+          1371. VoluntasStreamConsumer.kt
+            1373. Low-level interface for consuming raw Relationship protos; used by ModuleLoader and VoluntasServiceGrpcImpl for direct stream access
+            1375. VoluntasStreamConsumer
+              1377. Single-method interface: receive a raw Relationship op and update state accordingly
+              1379. consume(relationship: Relationship): CommandResult
+          1381. LiteralStore must correctly deduplicate and retrieve all supported value types
+            1383. LiteralStore unit tests
+              1385. LiteralStoreTest.kt
+                1387. Verifies literal creation, content-addressed deduplication, bootstrap ordinals, and all supported types
+                1389. LiteralStoreTest
+                  1391. testStringDeduplication() — same string returns same ID on repeated calls
+                  1393. testAllValueTypes() — string, long, double, bool, bytes all store and retrieve correctly
+                  1395. testHighBitPattern() — IDs use the Long.MIN_VALUE | ordinal pattern
+          1397. Core service operations and persistence must be verified by automated tests
+            1399. VoluntasIntentService unit tests
+              1401. VoluntasIntentServiceTest.kt
+                1403. Tests root creation, addIntent, getById, edit, moveParent, writeToFile, fromFile round-trip, and field handling
+                1405. VoluntasIntentServiceTest
+                  1407. testCreateRoot() — new() produces a service with root intent at ID 0
+                  1409. testAddIntent() — addIntent creates child with correct text and parent
+                  1411. testEditIntent() — edit() updates text and is visible via getById()
+                  1413. testMoveParent() — moveParent() re-parents correctly
+                  1415. testWriteAndReload() — writeToFile + fromFile produces identical state
+                  1417. testFieldHandling() — AddField and SetFieldValue produce correct fieldValues()
+      1215. All state is represented as Relationship and Literal ops; state is fully reconstructed by replaying ops in order from the stream file
 2101. develop voluntas
   2015. The project must be buildable, testable, and runnable via a consistent Gradle toolchain with shell script convenience wrappers
     2017. Gradle build uses the protobuf plugin to generate Kotlin stubs from voluntas.proto; each runnable component has a dedicated JavaExec task
@@ -386,109 +543,6 @@
         2071. grpcurl wrapper: writes input_tokens and output_tokens INT64 fields on a requirement intent after a worker turn
       2073. CLAUDE.md
         2075. Workflow instructions for the Claude Code agent: intent tree protocol, tree exploration procedure, requirement/system/implementation pattern, and token tracking steps
-    1213. Store and replay the intent tree as an append-only protobuf relationship-graph stream
-      1215. All state is represented as Relationship and Literal ops; state is fully reconstructed by replaying ops in order from the stream file
-      1217. Voluntas relationship-graph backend (Protobuf-based event store)
-        1219. Low-level event-sourced storage engine: relationships, literals, bootstrap IDs, and the main replay and mutation loop
-        1221. VoluntasIds.kt
-          1223. Compile-time constants for all bootstrap entity IDs (0–14); these IDs are stable across all stream files — changing them would corrupt existing data
-          1225. VoluntasIds
-            1227. Object with named Long constants for every bootstrap relationship type, meta entity, and structural node
-            1229. DEFINES_TYPE = 1L — relationship op: entity A defines a new type identified as B
-            1231. DEFINES_FIELD = 2L — relationship op: type A declares a field with name literal B and type-ref C
-            1233. INSTANTIATES = 3L — relationship op: entity A is an instance of type B with text literal C under parent D
-            1235. SETS_FIELD = 4L — relationship op: sets field B of entity A to value literal C
-            1237. ADDS_PARTICIPANT = 5L — relationship op: appends a participant to entity A
-            1239. DEFINES_MACRO = 6L — relationship op: entity A is a macro with name literal B and param-names literal C
-            1241. STRING_INTENT_TYPE = 7L — the base string/text type; all visible intents instantiate this or a subtype of it
-            1243. DEFINES_MACRO_OP = 9L — relationship op: appends one body step to macro A's op list
-            1245. INVOKES_MACRO = 10L — relationship op: invokes macro A with arg list literal B under parent C
-            1247. NAME_TYPE = 11L — the type for name-path namespace nodes
-            1249. META_ROOT = 12L — root of the meta (type/macro) subtree, parent of all type entities
-            1251. NAMES_ROOT = 13L — root of the name-path namespace
-            1253. META_NAME_NODE = 14L — name node entity for the meta root
-            1255. FIRST_USER_ENTITY = 1000L — first entity ID available for user and module allocation
-        1257. VoluntasIntentService.kt
-          1259. Central service class: holds the live in-memory state, implements IntentService + IntentStreamConsumer + VoluntasStreamConsumer, orchestrates all replay and mutation
-          1261. VoluntasIntentService
-            1263. Full implementation of IntentService; maintains byId map, instancesByType, literalStore, name-path namespace maps, and macro registry
-          1265. Factory and lifecycle methods
-            1267. Static factory methods and stream load/replay entry points
-            1269. new(rootText: String): VoluntasIntentService — creates a fresh stream with bootstrap ops and the given root intent
-            1271. fromFile(fileName: String): VoluntasIntentService — parses stream from disk, replays ops, calls migrateBootstrap()
-            1273. fromStream(stream: Stream): VoluntasIntentService — replays an in-memory Stream proto (used by ModuleLoader)
-            1275. replayStream(stream: Stream) — iterates all Ops and dispatches to processRelationship() or literalStore.register()
-            1277. processRelationship(rel: Relationship) — routes a single Relationship op to the appropriate handler by op type
-          1279. Bootstrap and name-path namespace methods
-            1281. Emit and migrate the well-known bootstrap entities; maintain the '/segment/segment' path namespace for types and macros
-            1283. emitBootstrap() — emits Relationship ops for bootstrap IDs 1–14 into a brand-new stream
-            1285. migrateBootstrap() — idempotently emits any missing bootstrap entities when loading an older stream file
-            1287. handleInstantiatesNameNode(rel) — updates nameNodeToPath, namesByPath, nameNodeByReferent maps from a NAME_TYPE instantiation
-            1289. findOrCreateNameNode(path: String): Long — ensures the full '/a/b/c' path chain exists; creates missing nodes
-            1291. getNamePath(entityId: Long): String? — returns the string path for an entity that has a name node
-            1293. getNameNodeByPath(path: String): Long? — returns the entity ID whose name node has the given path
-            1295. getNameNodePath(nameNodeId: Long): String? — returns path for a name-node entity directly
-          1297. Mutation methods
-            1299. All methods that emit new Relationship ops and update in-memory state
-            1301. addIntent(text: String, parentId: Long): Intent — creates a STRING_INTENT_TYPE intent; emits INSTANTIATES op
-            1303. addIntentOfType(typeId: Long, text: String, parentId: Long): Intent — creates a typed intent; emits INSTANTIATES with given typeId
-            1305. edit(id: Long, newText: String): CommandResult — emits SETS_FIELD for the text literal; updates byId
-            1307. moveParent(id: Long, newParentId: Long): CommandResult — emits SETS_FIELD for parent; updates parent/child maps
-            1309. deleteIntent(id: Long): CommandResult — soft-deletes: sets deleted=true field
-            1311. emitRelationship(rel: Relationship) — appends to ops list and calls processRelationship()
-          1313. Query methods
-            1315. Read-only access to in-memory state; no side effects
-            1317. getById(id: Long): Intent? — looks up by entity ID in byId map; returns null if not found
-            1319. getAll(): List<Intent> — all non-meta intents visible to users
-            1321. getAllEntities(): Map<Long, Intent> — entire byId map including meta entities (types, macros, name nodes)
-            1323. getInstancesOfType(typeId: Long): List<Long> — returns entity IDs of all instances of the given type
-            1325. getFocalScope(id: Long): FocalScope — constructs FocalScope with focus, ancestry chain, and direct children
-            1327. getCommandAnnotations(): List<Pair<String,Long>> — scans byId for '/interface/command' type instances; returns (keyword, macroEntityId) pairs
-          1329. Macro system methods
-            1331. Define, store, and expand parameterised command templates at invocation time
-            1333. defineMacro(name: String, params: List<String>): Long — registers DEFINES_MACRO relationship; stores MacroDef in macros map; creates name node
-            1335. addMacroOp(macroId: Long, opType: Long, participants: List<Long>) — appends a DEFINES_MACRO_OP body step; validates param refs at definition time
-            1337. handleInvokesMacro(macroId: Long, args: List<Long>, parentId: Long) — expands macro: substitutes $name/$index param refs with actual arg literal IDs, emits each body op
-            1339. paramRef(name: String): Long — returns a literal ID encoding a '$name' substitution placeholder for use in macro body ops
-            1341. getMacroByName(name: String): MacroDef? — looks up a macro by name path; used by ModuleLoader and command annotation scanning
-          1343. SubmitOpRequest dispatch
-            1345. Implements IntentStreamConsumer.consume(): routes each SubmitOpRequest payload variant to the appropriate mutation method
-            1347. consume(request: SubmitOpRequest): CommandResult — dispatches oneof payload: CreateIntent, UpdateIntentText, UpdateIntentParent, AddField, SetFieldValue, InvokeMacro, WriteNoGarbage
-        1349. LiteralStore.kt
-          1351. Content-addressed literal storage: each unique value gets a stable ID (Long.MIN_VALUE | ordinal); the same value always maps to the same ID regardless of when it was first stored
-          1353. LiteralStore
-            1355. Manages bidirectional maps between literal IDs and values; supports String, Long, Double, Boolean, ByteArray; IDs set the high bit (Long.MIN_VALUE | ordinal)
-            1357. getOrCreate(value: String): Long — returns existing or allocates new literal ID for the string
-            1359. getOrCreate(value: Long): Long — for 64-bit integer literals
-            1361. getOrCreate(value: Double): Long — for floating-point literals
-            1363. getOrCreate(value: Boolean): Long — for boolean literals
-            1365. getOrCreate(value: ByteArray): Long — for raw byte array literals
-            1367. register(literal: Literal) — loads a proto Literal message during stream replay; populates both forward and reverse maps
-            1369. getValue(id: Long): Any? — retrieves the stored value for a literal ID; returns null if not registered
-        1371. VoluntasStreamConsumer.kt
-          1373. Low-level interface for consuming raw Relationship protos; used by ModuleLoader and VoluntasServiceGrpcImpl for direct stream access
-          1375. VoluntasStreamConsumer
-            1377. Single-method interface: receive a raw Relationship op and update state accordingly
-            1379. consume(relationship: Relationship): CommandResult
-        1381. LiteralStore must correctly deduplicate and retrieve all supported value types
-          1383. LiteralStore unit tests
-            1385. LiteralStoreTest.kt
-              1387. Verifies literal creation, content-addressed deduplication, bootstrap ordinals, and all supported types
-              1389. LiteralStoreTest
-                1391. testStringDeduplication() — same string returns same ID on repeated calls
-                1393. testAllValueTypes() — string, long, double, bool, bytes all store and retrieve correctly
-                1395. testHighBitPattern() — IDs use the Long.MIN_VALUE | ordinal pattern
-        1397. Core service operations and persistence must be verified by automated tests
-          1399. VoluntasIntentService unit tests
-            1401. VoluntasIntentServiceTest.kt
-              1403. Tests root creation, addIntent, getById, edit, moveParent, writeToFile, fromFile round-trip, and field handling
-              1405. VoluntasIntentServiceTest
-                1407. testCreateRoot() — new() produces a service with root intent at ID 0
-                1409. testAddIntent() — addIntent creates child with correct text and parent
-                1411. testEditIntent() — edit() updates text and is visible via getById()
-                1413. testMoveParent() — moveParent() re-parents correctly
-                1415. testWriteAndReload() — writeToFile + fromFile produces identical state
-                1417. testFieldHandling() — AddField and SetFieldValue produce correct fieldValues()
     1451. Users must be able to extend the type system with new types, commands, and macros via loadable module .pb files
       1453. Modules are self-contained stream files that define types, macros, and command annotations; merged into the main stream at server startup
       1455. Declarative Kotlin DSL for authoring modules
