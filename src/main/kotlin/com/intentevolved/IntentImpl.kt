@@ -9,7 +9,8 @@ class IntentImpl(
     private val lastUpdatedTimestamp: Long? = null,
     private val fields: MutableMap<String, FieldDetails> = mutableMapOf(),
     private val values: MutableMap<String, Any> = mutableMapOf(),
-    private val isMeta: Boolean = true
+    private val isMeta: Boolean = true,
+    private val typeName: String? = null
 ) : Intent {
     override fun text() = text
     override fun id() = id
@@ -21,6 +22,7 @@ class IntentImpl(
     override fun fields(): Map<String, FieldDetails> = fields
     override fun fieldValues(): Map<String, Any> = values
     override fun isMeta() = isMeta
+    override fun typeName() = typeName
 
     internal fun addField(name: String, details: FieldDetails) {
         fields[name] = details

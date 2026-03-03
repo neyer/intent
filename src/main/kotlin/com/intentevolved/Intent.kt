@@ -31,6 +31,12 @@ interface Intent {
     fun fieldValues(): Map<String, Any>
 
     /**
+     * Returns the short type name of this intent (e.g. "note", "task", "requirement"),
+     * or null if this is a plain raw-text intent with no specific type.
+     */
+    fun typeName(): String?
+
+    /**
      * Returns true if this intent represents a meta-operation (like UpdateIntentText, AddField, etc.)
      * Returns false for regular intents created via CreateIntent.
      */

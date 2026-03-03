@@ -269,6 +269,45 @@
             1957. markIntentStarted(id: Long) — writes start_timestamp field via SetFieldValue op
             1959. markIntentFinished(id: Long) — writes end_timestamp field
             1961. recordTokenUsage(id: Long, inputTokens: Long, outputTokens: Long) — writes input_tokens and output_tokens INT64 fields
+    2115. Display intent type annotation in web and terminal clients
+        started: 1772561001800080052
+        input_tokens: 0
+        output_tokens: 0
+        completed: 1772561454462769860
+        done: true
+      2118. Propagate type name through the Intent interface and proto pipeline
+          completed: 1772561450325986745
+          done: true
+      2119. Render type annotation in web client display
+          completed: 1772561450788254783
+          done: true
+      2120. Render type annotation in terminal client display
+          completed: 1772561451245722705
+          done: true
+      2121. Add typeName() to Intent interface and IntentImpl
+          completed: 1772561445726531376
+          done: true
+      2122. Store typeName in handleInstantiates and preserve in handleSetsField
+          completed: 1772561446438900113
+          done: true
+      2123. Add optional type_name field to IntentProto in voluntas.proto
+          completed: 1772561447268847877
+          done: true
+      2124. Set type_name in intentToProto in VoluntasRuntime.kt
+          completed: 1772561447952562490
+          done: true
+      2125. Implement typeName() in IntentProtoWrapper in TerminalClient.kt
+          completed: 1772561448439102302
+          done: true
+      2127. Display type label in renderIntentRow in main.js
+          completed: 1772561449387357093
+          done: true
+      2128. Display type label in renderIntentRow in TerminalClient.kt
+          completed: 1772561449881045800
+          done: true
+      2126. Include typeName in Intent.toTreeMap() in WebServer.kt
+          completed: 1772561448914492994
+          done: true
   2105. internals
     1419. All state changes must be persisted as an append-only protobuf stream fully replayable from disk
       1421. The stream is a sequence of Op messages (Relationship | Literal); replay rebuilds the entire in-memory state; no separate database is needed
