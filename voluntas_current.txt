@@ -361,6 +361,27 @@
   2105. internals
     2228. runtime
       2240. listens on external ports, takes requests and passes them to runtime
+      1615. VoluntasRuntime.kt
+        1617. Top-level server process: wires gRPC server, optional Ktor web server, module loading, and shutdown hook; also contains the two gRPC service implementations
+        1619. VoluntasRuntime
+          1621. Orchestrates the full server: builds gRPC Server with both service impls, starts IntentWebServer if webPort is set, loads modules from directory
+          1623. start() — starts gRPC server, calls loadModules(), starts web server if configured, wires broadcast callbacks on both gRPC impls
+          1625. loadModules(dir: String) — scans directory for .pb files sorted by name; loads each via ModuleLoader; logs manifest; warns if no command annotations found
+          1627. stop() — shuts down web server, gRPC server, and state dispatcher in order
+          1629. blockUntilShutdown() — blocks calling thread until gRPC server terminates
+          1631. main(args: Array<String>) — CLI entry: args are port, fileName, webPort, modulesDir; loads stream or creates new; starts server
+        1633. VoluntasIntentServiceGrpcImpl
+          1635. Coroutine gRPC impl for IntentService; all calls run in stateDispatcher for serialised access; triggers onMutation broadcast callback after successful mutations
+          1637. submitOp(request): SubmitOpResponse — routes to service.consume(); saves file; extracts new ID from result message; triggers onMutation
+          1639. getIntent(request): GetIntentResponse — looks up intent by ID; converts to IntentProto via intentToProto()
+          1641. getFocalScope(request): GetFocalScopeResponse — calls service.getFocalScope(); converts focus/ancestry/children to proto
+          1643. getCommands(request): GetCommandsResponse — calls getCommandAnnotations(); returns list of CommandInfo (keyword + macroEntityId)
+          1645. extractIdFromResult(message: String): Long — regex extracts 'intent <N>' from result message to populate SubmitOpResponse.id
+        1647. VoluntasServiceGrpcImpl
+          1649. Coroutine gRPC impl for the raw VoluntasService; provides direct Relationship and Literal submission without high-level routing through SubmitOpRequest
+          1651. submitRelationship(request): SubmitRelationshipResponse — casts service to VoluntasStreamConsumer and calls consume(Relationship)
+          1653. submitLiteral(request): SubmitLiteralResponse — calls service.literalStore.register(literal)
+        1655. intentToProto(intent: Intent): IntentProto — top-level file function; converts Intent including fields, fieldValues (all scalar types), and participantIds
     2231. service
       2237. processes events one at a time and updates application state
       2246. bootstrap
@@ -429,52 +450,6 @@
               1251. NAMES_ROOT = 13L — root of the name-path namespace
               1253. META_NAME_NODE = 14L — name node entity for the meta root
               1255. FIRST_USER_ENTITY = 1000L — first entity ID available for user and module allocation
-          1257. VoluntasIntentService.kt
-            1259. Central service class: holds the live in-memory state, implements IntentService + IntentStreamConsumer + VoluntasStreamConsumer, orchestrates all replay and mutation
-            1261. VoluntasIntentService
-              1263. Full implementation of IntentService; maintains byId map, instancesByType, literalStore, name-path namespace maps, and macro registry
-            1265. Factory and lifecycle methods
-              1267. Static factory methods and stream load/replay entry points
-              1269. new(rootText: String): VoluntasIntentService — creates a fresh stream with bootstrap ops and the given root intent
-              1271. fromFile(fileName: String): VoluntasIntentService — parses stream from disk, replays ops, calls migrateBootstrap()
-              1273. fromStream(stream: Stream): VoluntasIntentService — replays an in-memory Stream proto (used by ModuleLoader)
-              1275. replayStream(stream: Stream) — iterates all Ops and dispatches to processRelationship() or literalStore.register()
-              1277. processRelationship(rel: Relationship) — routes a single Relationship op to the appropriate handler by op type
-            1279. Bootstrap and name-path namespace methods
-              1281. Emit and migrate the well-known bootstrap entities; maintain the '/segment/segment' path namespace for types and macros
-              1283. emitBootstrap() — emits Relationship ops for bootstrap IDs 1–14 into a brand-new stream
-              1285. migrateBootstrap() — idempotently emits any missing bootstrap entities when loading an older stream file
-              1287. handleInstantiatesNameNode(rel) — updates nameNodeToPath, namesByPath, nameNodeByReferent maps from a NAME_TYPE instantiation
-              1289. findOrCreateNameNode(path: String): Long — ensures the full '/a/b/c' path chain exists; creates missing nodes
-              1291. getNamePath(entityId: Long): String? — returns the string path for an entity that has a name node
-              1293. getNameNodeByPath(path: String): Long? — returns the entity ID whose name node has the given path
-              1295. getNameNodePath(nameNodeId: Long): String? — returns path for a name-node entity directly
-            1297. Mutation methods
-              1299. All methods that emit new Relationship ops and update in-memory state
-              1301. addIntent(text: String, parentId: Long): Intent — creates a STRING_INTENT_TYPE intent; emits INSTANTIATES op
-              1303. addIntentOfType(typeId: Long, text: String, parentId: Long): Intent — creates a typed intent; emits INSTANTIATES with given typeId
-              1305. edit(id: Long, newText: String): CommandResult — emits SETS_FIELD for the text literal; updates byId
-              1307. moveParent(id: Long, newParentId: Long): CommandResult — emits SETS_FIELD for parent; updates parent/child maps
-              1309. deleteIntent(id: Long): CommandResult — soft-deletes: sets deleted=true field
-              1311. emitRelationship(rel: Relationship) — appends to ops list and calls processRelationship()
-            1313. Query methods
-              1315. Read-only access to in-memory state; no side effects
-              1317. getById(id: Long): Intent? — looks up by entity ID in byId map; returns null if not found
-              1319. getAll(): List<Intent> — all non-meta intents visible to users
-              1321. getAllEntities(): Map<Long, Intent> — entire byId map including meta entities (types, macros, name nodes)
-              1323. getInstancesOfType(typeId: Long): List<Long> — returns entity IDs of all instances of the given type
-              1325. getFocalScope(id: Long): FocalScope — constructs FocalScope with focus, ancestry chain, and direct children
-              1327. getCommandAnnotations(): List<Pair<String,Long>> — scans byId for '/interface/command' type instances; returns (keyword, macroEntityId) pairs
-            1329. Macro system methods
-              1331. Define, store, and expand parameterised command templates at invocation time
-              1333. defineMacro(name: String, params: List<String>): Long — registers DEFINES_MACRO relationship; stores MacroDef in macros map; creates name node
-              1335. addMacroOp(macroId: Long, opType: Long, participants: List<Long>) — appends a DEFINES_MACRO_OP body step; validates param refs at definition time
-              1337. handleInvokesMacro(macroId: Long, args: List<Long>, parentId: Long) — expands macro: substitutes $name/$index param refs with actual arg literal IDs, emits each body op
-              1339. paramRef(name: String): Long — returns a literal ID encoding a '$name' substitution placeholder for use in macro body ops
-              1341. getMacroByName(name: String): MacroDef? — looks up a macro by name path; used by ModuleLoader and command annotation scanning
-            1343. SubmitOpRequest dispatch
-              1345. Implements IntentStreamConsumer.consume(): routes each SubmitOpRequest payload variant to the appropriate mutation method
-              1347. consume(request: SubmitOpRequest): CommandResult — dispatches oneof payload: CreateIntent, UpdateIntentText, UpdateIntentParent, AddField, SetFieldValue, InvokeMacro, WriteNoGarbage
           1349. LiteralStore.kt
             1351. Content-addressed literal storage: each unique value gets a stable ID (Long.MIN_VALUE | ordinal); the same value always maps to the same ID regardless of when it was first stored
             1353. LiteralStore
@@ -511,6 +486,52 @@
                   1415. testWriteAndReload() — writeToFile + fromFile produces identical state
                   1417. testFieldHandling() — AddField and SetFieldValue produce correct fieldValues()
       1215. All state is represented as Relationship and Literal ops; state is fully reconstructed by replaying ops in order from the stream file
+      1257. VoluntasIntentService.kt
+        1259. Central service class: holds the live in-memory state, implements IntentService + IntentStreamConsumer + VoluntasStreamConsumer, orchestrates all replay and mutation
+        1261. VoluntasIntentService
+          1263. Full implementation of IntentService; maintains byId map, instancesByType, literalStore, name-path namespace maps, and macro registry
+        1265. Factory and lifecycle methods
+          1267. Static factory methods and stream load/replay entry points
+          1269. new(rootText: String): VoluntasIntentService — creates a fresh stream with bootstrap ops and the given root intent
+          1271. fromFile(fileName: String): VoluntasIntentService — parses stream from disk, replays ops, calls migrateBootstrap()
+          1273. fromStream(stream: Stream): VoluntasIntentService — replays an in-memory Stream proto (used by ModuleLoader)
+          1275. replayStream(stream: Stream) — iterates all Ops and dispatches to processRelationship() or literalStore.register()
+          1277. processRelationship(rel: Relationship) — routes a single Relationship op to the appropriate handler by op type
+        1279. Bootstrap and name-path namespace methods
+          1281. Emit and migrate the well-known bootstrap entities; maintain the '/segment/segment' path namespace for types and macros
+          1283. emitBootstrap() — emits Relationship ops for bootstrap IDs 1–14 into a brand-new stream
+          1285. migrateBootstrap() — idempotently emits any missing bootstrap entities when loading an older stream file
+          1287. handleInstantiatesNameNode(rel) — updates nameNodeToPath, namesByPath, nameNodeByReferent maps from a NAME_TYPE instantiation
+          1289. findOrCreateNameNode(path: String): Long — ensures the full '/a/b/c' path chain exists; creates missing nodes
+          1291. getNamePath(entityId: Long): String? — returns the string path for an entity that has a name node
+          1293. getNameNodeByPath(path: String): Long? — returns the entity ID whose name node has the given path
+          1295. getNameNodePath(nameNodeId: Long): String? — returns path for a name-node entity directly
+        1297. Mutation methods
+          1299. All methods that emit new Relationship ops and update in-memory state
+          1301. addIntent(text: String, parentId: Long): Intent — creates a STRING_INTENT_TYPE intent; emits INSTANTIATES op
+          1303. addIntentOfType(typeId: Long, text: String, parentId: Long): Intent — creates a typed intent; emits INSTANTIATES with given typeId
+          1305. edit(id: Long, newText: String): CommandResult — emits SETS_FIELD for the text literal; updates byId
+          1307. moveParent(id: Long, newParentId: Long): CommandResult — emits SETS_FIELD for parent; updates parent/child maps
+          1309. deleteIntent(id: Long): CommandResult — soft-deletes: sets deleted=true field
+          1311. emitRelationship(rel: Relationship) — appends to ops list and calls processRelationship()
+        1313. Query methods
+          1315. Read-only access to in-memory state; no side effects
+          1317. getById(id: Long): Intent? — looks up by entity ID in byId map; returns null if not found
+          1319. getAll(): List<Intent> — all non-meta intents visible to users
+          1321. getAllEntities(): Map<Long, Intent> — entire byId map including meta entities (types, macros, name nodes)
+          1323. getInstancesOfType(typeId: Long): List<Long> — returns entity IDs of all instances of the given type
+          1325. getFocalScope(id: Long): FocalScope — constructs FocalScope with focus, ancestry chain, and direct children
+          1327. getCommandAnnotations(): List<Pair<String,Long>> — scans byId for '/interface/command' type instances; returns (keyword, macroEntityId) pairs
+        1329. Macro system methods
+          1331. Define, store, and expand parameterised command templates at invocation time
+          1333. defineMacro(name: String, params: List<String>): Long — registers DEFINES_MACRO relationship; stores MacroDef in macros map; creates name node
+          1335. addMacroOp(macroId: Long, opType: Long, participants: List<Long>) — appends a DEFINES_MACRO_OP body step; validates param refs at definition time
+          1337. handleInvokesMacro(macroId: Long, args: List<Long>, parentId: Long) — expands macro: substitutes $name/$index param refs with actual arg literal IDs, emits each body op
+          1339. paramRef(name: String): Long — returns a literal ID encoding a '$name' substitution placeholder for use in macro body ops
+          1341. getMacroByName(name: String): MacroDef? — looks up a macro by name path; used by ModuleLoader and command annotation scanning
+        1343. SubmitOpRequest dispatch
+          1345. Implements IntentStreamConsumer.consume(): routes each SubmitOpRequest payload variant to the appropriate mutation method
+          1347. consume(request: SubmitOpRequest): CommandResult — dispatches oneof payload: CreateIntent, UpdateIntentText, UpdateIntentParent, AddField, SetFieldValue, InvokeMacro, WriteNoGarbage
 2101. develop voluntas
   2015. The project must be buildable, testable, and runnable via a consistent Gradle toolchain with shell script convenience wrappers
     2017. Gradle build uses the protobuf plugin to generate Kotlin stubs from voluntas.proto; each runnable component has a dedicated JavaExec task
