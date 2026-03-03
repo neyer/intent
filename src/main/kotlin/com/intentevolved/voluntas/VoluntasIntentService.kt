@@ -428,6 +428,8 @@ class VoluntasIntentService private constructor(
             val textLitId = if (participants.size >= 3) participants[2] else null
             val parentEntityId = if (participants.size >= 4) participants[3] else null
             val text = if (textLitId != null) literalStore.getString(textLitId) ?: "" else ""
+            val intentTypeName = if (typeId == VoluntasIds.STRING_INTENT_TYPE) null
+                                 else getNamePath(typeId)?.substringAfterLast('/')
 
             val intent = IntentImpl(
                 text = text,
@@ -435,7 +437,8 @@ class VoluntasIntentService private constructor(
                 participantIds = if (parentEntityId != null) mutableListOf(parentEntityId) else mutableListOf(),
                 stateProvider = this,
                 createdTimestamp = timestamp,
-                isMeta = false
+                isMeta = false,
+                typeName = intentTypeName
             )
             byId[entityId] = intent
 
@@ -495,7 +498,8 @@ class VoluntasIntentService private constructor(
                     lastUpdatedTimestamp = timestamp,
                     fields = existing.fields().toMutableMap(),
                     values = existing.fieldValues().toMutableMap(),
-                    isMeta = existing.isMeta()
+                    isMeta = existing.isMeta(),
+                    typeName = existing.typeName()
                 )
                 byId[targetId] = updated
             }
@@ -528,7 +532,8 @@ class VoluntasIntentService private constructor(
                     lastUpdatedTimestamp = timestamp,
                     fields = existing.fields().toMutableMap(),
                     values = existing.fieldValues().toMutableMap(),
-                    isMeta = existing.isMeta()
+                    isMeta = existing.isMeta(),
+                    typeName = existing.typeName()
                 )
                 byId[targetId] = updated
             }

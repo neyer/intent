@@ -35,4 +35,10 @@ interface Intent {
      * Returns false for regular intents created via CreateIntent.
      */
     fun isMeta(): Boolean
+
+    /**
+     * Returns the last path segment of the type name (e.g. "note", "task") for typed intents,
+     * or null for plain raw-text intents (instances of STRING_INTENT_TYPE).
+     */
+    fun typeName(): String?
 }

@@ -245,6 +245,7 @@ fun FocalScope.toApiMap(): Map<String, Any?> = mapOf(
 private fun Intent.toTreeMap(): Map<String, Any?> = mapOf(
     "id" to id(),
     "text" to text(),
+    "typeName" to typeName(),
     "createdTimestamp" to createdTimestamp(),
     "lastUpdatedTimestamp" to lastUpdatedTimestamp(),
     "fieldValues" to fieldValues()

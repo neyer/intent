@@ -61,7 +61,8 @@ function renderIntentRow(intent, prefix, cssClass) {
     const ts = formatTimestamp(intent.lastUpdatedTimestamp || intent.createdTimestamp);
     const row = document.createElement("div");
     row.className = "intent-row clickable " + cssClass;
-    row.textContent = prefix + intent.id + " - " + intent.text + " (at " + ts + ")";
+    const typeLabel = intent.typeName ? "[" + intent.typeName + "] " : "";
+    row.textContent = prefix + intent.id + " - " + typeLabel + intent.text + " (at " + ts + ")";
     row.addEventListener("click", function (e) {
         e.stopPropagation();
         submitCommand("focus " + intent.id);

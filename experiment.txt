@@ -1,0 +1,8 @@
+prompt: 
+❯ Please modify both the web client and the terminal client so that they
+    display the 'type' of an intent, if that type is anything other than raw text.
+
+no plan file to read, no CLAUDE.md either
+
+
+cost: 50.4k tokens

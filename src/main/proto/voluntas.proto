@@ -284,6 +284,7 @@ message IntentProto {
   map<string, FieldDetailsProto> fields = 7;
   map<string, FieldValueProto> field_values = 8;
   repeated int64 participant_ids = 9;
+  optional string type_name = 10;
 }
 
 message FieldDetailsProto {
