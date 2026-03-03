@@ -269,6 +269,48 @@
             1957. markIntentStarted(id: Long) — writes start_timestamp field via SetFieldValue op
             1959. markIntentFinished(id: Long) — writes end_timestamp field
             1961. recordTokenUsage(id: Long, inputTokens: Long, outputTokens: Long) — writes input_tokens and output_tokens INT64 fields
+    2115. Display intent type in web and terminal clients
+        started: 1772559871000611927
+        input_tokens: 0
+        output_tokens: 0
+        completed: 1772560051361555050
+        done: true
+      2118. Expose typeName on Intent interface and IntentImpl
+          completed: 1772560040788373177
+          done: true
+      2119. Add type_name to IntentProto and intentToProto()
+          completed: 1772560041185260078
+          done: true
+      2120. Update terminal client rendering to show type
+          completed: 1772560041580999172
+          done: true
+      2121. Update web client rendering to show type
+          completed: 1772560041975392389
+          done: true
+      2122. Intent.kt: add typeName() method
+          completed: 1772559920843671670
+          done: true
+      2123. IntentImpl.kt: add typeName constructor param and override
+          completed: 1772559921267155916
+          done: true
+      2124. VoluntasIntentService.kt: compute and set typeName in handleInstantiates, preserve on updates
+          completed: 1772559951240270973
+          done: true
+      2125. voluntas.proto: add optional string type_name to IntentProto
+          completed: 1772559959754082551
+          done: true
+      2126. VoluntasRuntime.kt: populate type_name in intentToProto()
+          completed: 1772559968966632390
+          done: true
+      2127. TerminalClient.kt: implement typeName() in IntentProtoWrapper, update renderIntentRow()
+          completed: 1772559982228680866
+          done: true
+      2128. WebServer.kt: add typeName to toTreeMap()
+          completed: 1772559988924746064
+          done: true
+      2129. main.js: display typeName in renderIntentRow()
+          completed: 1772559996110080674
+          done: true
   2105. internals
     1419. All state changes must be persisted as an append-only protobuf stream fully replayable from disk
       1421. The stream is a sequence of Op messages (Relationship | Literal); replay rebuilds the entire in-memory state; no separate database is needed

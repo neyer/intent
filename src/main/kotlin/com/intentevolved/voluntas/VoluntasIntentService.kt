@@ -428,6 +428,8 @@ class VoluntasIntentService private constructor(
             val textLitId = if (participants.size >= 3) participants[2] else null
             val parentEntityId = if (participants.size >= 4) participants[3] else null
             val text = if (textLitId != null) literalStore.getString(textLitId) ?: "" else ""
+            val visibleTypeName = if (typeId == VoluntasIds.STRING_INTENT_TYPE) null
+                                  else getNamePath(typeId)?.substringAfterLast('/')
 
             val intent = IntentImpl(
                 text = text,
@@ -435,7 +437,8 @@ class VoluntasIntentService private constructor(
                 participantIds = if (parentEntityId != null) mutableListOf(parentEntityId) else mutableListOf(),
                 stateProvider = this,
                 createdTimestamp = timestamp,
-                isMeta = false
+                isMeta = false,
+                typeName = visibleTypeName
             )
             byId[entityId] = intent
 
@@ -495,7 +498,8 @@ class VoluntasIntentService private constructor(
                     lastUpdatedTimestamp = timestamp,
                     fields = existing.fields().toMutableMap(),
                     values = existing.fieldValues().toMutableMap(),
-                    isMeta = existing.isMeta()
+                    isMeta = existing.isMeta(),
+                    typeName = existing.typeName()
                 )
                 byId[targetId] = updated
             }
@@ -528,7 +532,8 @@ class VoluntasIntentService private constructor(
                     lastUpdatedTimestamp = timestamp,
                     fields = existing.fields().toMutableMap(),
                     values = existing.fieldValues().toMutableMap(),
-                    isMeta = existing.isMeta()
+                    isMeta = existing.isMeta(),
+                    typeName = existing.typeName()
                 )
                 byId[targetId] = updated
             }
@@ -551,9 +556,9 @@ class VoluntasIntentService private constructor(
                         existing.setFieldValue(fieldName, value)
                         // For "command-name", update the display text to "<type> <command>"
                         if (fieldName == "command-name" && value is String && value.isNotEmpty()) {
-                            val typeName = existing.text().substringBefore(':').ifEmpty { "instance" }
+                            val displayTypeName = existing.text().substringBefore(':').ifEmpty { "instance" }
                             byId[targetId] = IntentImpl(
-                                text = "$typeName $value",
+                                text = "$displayTypeName $value",
                                 id = targetId,
                                 participantIds = existing.participantIds,
                                 stateProvider = this,
@@ -561,7 +566,8 @@ class VoluntasIntentService private constructor(
                                 lastUpdatedTimestamp = timestamp,
                                 fields = existing.fields() as MutableMap<String, FieldDetails>,
                                 values = existing.fieldValues() as MutableMap<String, Any>,
-                                isMeta = existing.isMeta()
+                                isMeta = existing.isMeta(),
+                                typeName = existing.typeName()
                             )
                         }
                     }

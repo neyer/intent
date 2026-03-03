@@ -35,4 +35,10 @@ interface Intent {
      * Returns false for regular intents created via CreateIntent.
      */
     fun isMeta(): Boolean
+
+    /**
+     * Returns the type name of this intent (e.g. "note", "requirement"), or null if it is a raw
+     * STRING_INTENT_TYPE (plain text) intent.
+     */
+    fun typeName(): String?
 }

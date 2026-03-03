@@ -121,7 +121,8 @@ fun clearLine(tg: TextGraphics, row: Int) {
 fun renderIntentRow(tg: TextGraphics, intent: Intent, row: Int, prefix: String = ""): Int {
     val epochNanos = intent.lastUpdatedTimestamp() ?: intent.createdTimestamp()
     val timestamp = epochNanos?.let { formatEpochNanosAsLocalMinute(it) } ?: "unknown time"
-    tg.putString(0, row, "$prefix${intent.id()} - ${intent.text()} (at $timestamp)")
+    val typeLabel = intent.typeName()?.let { " [$it]" } ?: ""
+    tg.putString(0, row, "$prefix${intent.id()}$typeLabel - ${intent.text()} (at $timestamp)")
 
     var rowsUsed = 1
     val fieldIndent = "$prefix    "
@@ -244,4 +245,6 @@ class IntentProtoWrapper(
     }
 
     override fun isMeta(): Boolean = proto.isMeta
+
+    override fun typeName(): String? = if (proto.hasTypeName()) proto.typeName else null
 }
