@@ -26,10 +26,11 @@ class IntentWebServer(
     private val stateProvider: IntentStateProvider,
     private val consumer: IntentStreamConsumer,
     private val stateDispatcher: CoroutineDispatcher,
+    private val commandAnnotations: List<Pair<String, Long>> = emptyList(),
     private val onMutation: suspend () -> Unit = {}
 ) {
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
-    private val sessionManager = SessionManager(consumer, stateProvider)
+    private val sessionManager = SessionManager(consumer, stateProvider, commandAnnotations)
     private val gson = Gson()
 
     fun start() {

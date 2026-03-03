@@ -3,6 +3,7 @@ package com.intentevolved.com.intentevolved.server
 import com.intentevolved.com.intentevolved.IntentStateProvider
 import com.intentevolved.com.intentevolved.IntentStreamConsumer
 import com.intentevolved.com.intentevolved.terminal.CommandExecutor
+import com.intentevolved.com.intentevolved.terminal.DynamicMacroCommand
 import io.ktor.server.websocket.*
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -15,7 +16,8 @@ class WebSessionState(
 
 class SessionManager(
     private val consumer: IntentStreamConsumer,
-    private val stateProvider: IntentStateProvider
+    private val stateProvider: IntentStateProvider,
+    private val commandAnnotations: List<Pair<String, Long>> = emptyList()
 ) {
     private val sessions = ConcurrentHashMap<String, WebSessionState>()
     private val connections = ConcurrentHashMap<String, WebSocketServerSession>()
@@ -25,10 +27,11 @@ class SessionManager(
             sessions[sessionId]?.let { return it }
         }
         val id = sessionId ?: UUID.randomUUID().toString()
-        val session = WebSessionState(
-            sessionId = id,
-            executor = CommandExecutor(consumer, stateProvider, null)
-        )
+        val executor = CommandExecutor(consumer, stateProvider, null)
+        for ((keyword, macroId) in commandAnnotations) {
+            executor.registerCommand(DynamicMacroCommand(keyword, macroId))
+        }
+        val session = WebSessionState(sessionId = id, executor = executor)
         sessions[id] = session
         return session
     }

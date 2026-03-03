@@ -766,6 +766,25 @@ class VoluntasIntentService private constructor(
         return byId[id]!!
     }
 
+    /**
+     * Create a new intent as an instance of the given [typeId] (e.g. a software/requirement type).
+     * The type must be a visible subtype of STRING_INTENT_TYPE so that [text] is stored as the
+     * intent's display text. Use [getAllEntities] to find a type ID by its name.
+     */
+    fun addIntentOfType(typeId: Long, text: String, parentId: Long): Intent {
+        val id = nextEntityId++
+        val textLitId = literalStore.getOrCreate(text)
+        val builder = Relationship.newBuilder()
+            .setId(id)
+            .addParticipants(VoluntasIds.INSTANTIATES)
+            .addParticipants(typeId)
+            .addParticipants(textLitId)
+            .addParticipants(parentId)
+
+        emitRelationship(builder.build())
+        return byId[id]!!
+    }
+
     override fun edit(id: Long, newText: String) {
         byId[id] ?: throw IllegalArgumentException("No intent with id $id")
 
@@ -1063,19 +1082,24 @@ class VoluntasIntentService private constructor(
     }
 
     /**
-     * Scans all instances of the "/standard/interface/command" type and returns a list of
-     * (commandName, macroEntityId) pairs. The macro entity ID is the parent of each annotation
-     * instance. Returns empty list if the standard module has not been loaded.
+     * Scans all instances of any "*\/interface/command" type (one per loaded module) and returns
+     * a list of (commandName, macroEntityId) pairs. The macro entity ID is the parent of each
+     * annotation instance.
      */
     fun getCommandAnnotations(): List<Pair<String, Long>> {
-        val commandTypeId = getEntityByPath("/standard/interface/command") ?: return emptyList()
-        return getInstancesOfType(commandTypeId).mapNotNull { instanceId ->
-            val instance = byId[instanceId] as? IntentImpl ?: return@mapNotNull null
-            val commandName = instance.fieldValues()["command-name"] as? String
-                ?: return@mapNotNull null
-            val macroEntityId = instance.participantIds.firstOrNull()
-                ?: return@mapNotNull null
-            commandName to macroEntityId
+        val commandTypeIds = byId.entries
+            .filter { (_, intent) -> intent.isMeta() && intent.text().endsWith("/interface/command") }
+            .map { it.key }
+
+        return commandTypeIds.flatMap { commandTypeId ->
+            getInstancesOfType(commandTypeId).mapNotNull { instanceId ->
+                val instance = byId[instanceId] as? IntentImpl ?: return@mapNotNull null
+                val commandName = instance.fieldValues()["command-name"] as? String
+                    ?: return@mapNotNull null
+                val macroEntityId = instance.participantIds.firstOrNull()
+                    ?: return@mapNotNull null
+                commandName to macroEntityId
+            }
         }
     }
 

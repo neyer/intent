@@ -48,7 +48,7 @@ class VoluntasRuntime(
 
         if (webPort != null) {
             println("Voluntas web server started on port $port")
-            val ws = IntentWebServer(webPort, service, service, stateDispatcher) {
+            val ws = IntentWebServer(webPort, service, service, stateDispatcher, service.getCommandAnnotations()) {
                 service.writeToFile(fileName)
             }
             ws.start()
@@ -90,6 +90,24 @@ class VoluntasRuntime(
 
         service.writeToFile(fileName)
         println("Modules loaded, stream saved")
+
+        val commands = service.getCommandAnnotations()
+        if (commands.isEmpty()) {
+            println("WARNING: no command annotations found after loading modules")
+            val commandTypes = service.getAllEntities().values
+                .filter { it.isMeta() && it.text().endsWith("/interface/command") }
+            println("  Command types found: ${commandTypes.map { "[${it.id()}] ${it.text()}" }}")
+            commandTypes.forEach { ct ->
+                val instances = service.getInstancesOfType(ct.id())
+                println("  Instances of [${ct.id()}]: $instances")
+                instances.forEach { id ->
+                    val inst = service.getAllEntities()[id]
+                    println("    [$id] text=${inst?.text()} fields=${inst?.fieldValues()}")
+                }
+            }
+        } else {
+            println("Commands available: ${commands.map { (kw, id) -> "$kw→$id" }}")
+        }
     }
 
     fun stop() {

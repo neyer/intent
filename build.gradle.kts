@@ -98,11 +98,27 @@ tasks.register<JavaExec>("runClient") {
     args = listOf("localhost", "50051")
 }
 
+// Task to regenerate modules/software.pb
+tasks.register<JavaExec>("runGenerateSoftware") {
+    group = "application"
+    description = "Regenerate modules/software.pb"
+    mainClass.set("com.intentevolved.plans.GenerateSoftwareModuleKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
 // Task to regenerate modules/standard.pb
 tasks.register<JavaExec>("runGenerateStandard") {
     group = "application"
     description = "Regenerate modules/standard.pb"
     mainClass.set("com.intentevolved.plans.GenerateStandardModuleKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+// Task to generate voluntas_plan.pb
+tasks.register<JavaExec>("runGenerateVoluntasPlan") {
+    group = "application"
+    description = "Generate voluntas_plan.pb"
+    mainClass.set("com.intentevolved.plans.GenerateVoluntasPlanKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
 

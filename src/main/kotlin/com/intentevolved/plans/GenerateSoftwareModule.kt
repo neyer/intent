@@ -31,6 +31,10 @@ fun main() {
         command("implementation") {
             field("implements", intentRef, description = "The system this implementation realizes")
         }
+
+        command("file")
+        command("class")
+        command("method")
     }
 
     File("modules").mkdirs()

@@ -135,8 +135,42 @@
         1545. Update WriteNoGarbageCommand to send WriteNoGarbage op via gRPC
             completed: 1772466765611114406
             done: true
+  1808. runtime
+  1809. service
 1003. Build Tooling to interact with Runtime
   1018. worker bot
+    1212. get claude integration showing token count per task
+        done: true
+      1333. Add intent sub-dag workflow to Claude Code via CLAUDE.md
+          started: 1772465148858275557
+          input_tokens: 0
+          output_tokens: 0
+          completed: 1772465161092701073
+          done: true
+        1336. Token count writing tool for intent server
+            completed: 1772465159891341572
+            done: true
+          1338. Create tools/intent-set-tokens.sh
+              completed: 1772465159109162968
+              done: true
+        1337. CLAUDE.md workflow instructions
+            completed: 1772465160295986893
+            done: true
+          1339. Add workflow section to CLAUDE.md
+              completed: 1772465159496883057
+              done: true
+      1365. Update CLAUDE.md to place new intents at the appropriate tree location
+          started: 1772465357016212268
+          input_tokens: 0
+          output_tokens: 0
+          completed: 1772465358616003738
+          done: true
+        1368. CLAUDE.md tree-placement instructions
+            completed: 1772465357848031813
+            done: true
+          1369. Replace hardcoded root parent with tree-exploration step
+              completed: 1772465357471120939
+              done: true
   1020. write standard libraries for common paradigms
     1021. basic task completion
         done: true
@@ -147,37 +181,7 @@
       1025. example
       1026. external reference
       1027. noting a crux
-  1212. get claude integration showing token count per task
-    1333. Add intent sub-dag workflow to Claude Code via CLAUDE.md
-        started: 1772465148858275557
-        input_tokens: 0
-        output_tokens: 0
-        completed: 1772465161092701073
-        done: true
-      1336. Token count writing tool for intent server
-          completed: 1772465159891341572
-          done: true
-        1338. Create tools/intent-set-tokens.sh
-            completed: 1772465159109162968
-            done: true
-      1337. CLAUDE.md workflow instructions
-          completed: 1772465160295986893
-          done: true
-        1339. Add workflow section to CLAUDE.md
-            completed: 1772465159496883057
-            done: true
-    1365. Update CLAUDE.md to place new intents at the appropriate tree location
-        started: 1772465357016212268
-        input_tokens: 0
-        output_tokens: 0
-        completed: 1772465358616003738
-        done: true
-      1368. CLAUDE.md tree-placement instructions
-          completed: 1772465357848031813
-          done: true
-        1369. Replace hardcoded root parent with tree-exploration step
-            completed: 1772465357471120939
-            done: true
+    1804. software development concepts
   1213. interfaces
     1005. Command line tool
       1014. basic implementation with explicit commands
