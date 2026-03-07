@@ -1,10 +1,10 @@
 import voluntas.v1.FieldType
-import com.intentevolved.com.intentevolved.Intent
-import com.intentevolved.com.intentevolved.IntentService
-import com.intentevolved.com.intentevolved.getAncestryPaths
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
-import com.intentevolved.com.intentevolved.voluntas.VoluntasStreamConsumer
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
+import com.apxhard.voluntas.Intent
+import com.apxhard.voluntas.IntentService
+import com.apxhard.voluntas.getAncestryPaths
+import com.apxhard.voluntas.voluntas.VoluntasIntentService
+import com.apxhard.voluntas.voluntas.VoluntasStreamConsumer
+import com.apxhard.voluntas.voluntas.VoluntasIds
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.BeforeEach

@@ -4,7 +4,7 @@ plugins {
     application
 }
 
-group = "com.intentevolved"
+group = "com.apxhard.voluntas"
 version = "1.0-SNAPSHOT"
 
 repositories {
@@ -76,14 +76,14 @@ kotlin {
 }
 
 application {
-    mainClass.set("com.intentevolved.com.intentevolved.terminal.TerminalClientKt")
+    mainClass.set("com.apxhard.voluntas.terminal.TerminalClientKt")
 }
 
 // Task to run the gRPC server
 tasks.register<JavaExec>("runServer") {
     group = "application"
     description = "Run the Voluntas gRPC server"
-    mainClass.set("com.intentevolved.com.intentevolved.voluntas.VoluntasRuntime")
+    mainClass.set("com.apxhard.voluntas.voluntas.VoluntasRuntime")
     classpath = sourceSets["main"].runtimeClasspath
     args = listOf("50051", "voluntas_current.pb", "8080")
 }
@@ -92,7 +92,7 @@ tasks.register<JavaExec>("runServer") {
 tasks.register<JavaExec>("runClient") {
     group = "application"
     description = "Run the Intent terminal client"
-    mainClass.set("com.intentevolved.com.intentevolved.terminal.TerminalClientKt")
+    mainClass.set("com.apxhard.voluntas.terminal.TerminalClientKt")
     classpath = sourceSets["main"].runtimeClasspath
     standardInput = System.`in`
     args = listOf("localhost", "50051")
@@ -102,7 +102,7 @@ tasks.register<JavaExec>("runClient") {
 tasks.register<JavaExec>("runGenerateSoftware") {
     group = "application"
     description = "Regenerate modules/software.pb"
-    mainClass.set("com.intentevolved.plans.GenerateSoftwareModuleKt")
+    mainClass.set("com.apxhard.voluntas.plans.GenerateSoftwareModuleKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
 
@@ -110,7 +110,7 @@ tasks.register<JavaExec>("runGenerateSoftware") {
 tasks.register<JavaExec>("runGenerateStandard") {
     group = "application"
     description = "Regenerate modules/standard.pb"
-    mainClass.set("com.intentevolved.plans.GenerateStandardModuleKt")
+    mainClass.set("com.apxhard.voluntas.plans.GenerateStandardModuleKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
 
@@ -118,7 +118,7 @@ tasks.register<JavaExec>("runGenerateStandard") {
 tasks.register<JavaExec>("runGenerateVoluntasPlan") {
     group = "application"
     description = "Generate voluntas_plan.pb"
-    mainClass.set("com.intentevolved.plans.GenerateVoluntasPlanKt")
+    mainClass.set("com.apxhard.voluntas.plans.GenerateVoluntasPlanKt")
     classpath = sourceSets["main"].runtimeClasspath
 }
 

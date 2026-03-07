@@ -1,5 +1,5 @@
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
+import com.apxhard.voluntas.voluntas.VoluntasIds
+import com.apxhard.voluntas.voluntas.VoluntasIntentService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows

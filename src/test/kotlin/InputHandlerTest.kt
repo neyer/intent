@@ -1,9 +1,9 @@
-package com.intentevolved
+package com.apxhard.voluntas
 
 
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
-import com.intentevolved.com.intentevolved.terminal.InputHandler
+import com.apxhard.voluntas.voluntas.VoluntasIntentService
+import com.apxhard.voluntas.voluntas.VoluntasIds
+import com.apxhard.voluntas.terminal.InputHandler
 import java.io.File
 
 import com.googlecode.lanterna.input.KeyStroke

@@ -358,6 +358,8 @@
               1957. markIntentStarted(id: Long) — writes start_timestamp field via SetFieldValue op
               1959. markIntentFinished(id: Long) — writes end_timestamp field
               1961. recordTokenUsage(id: Long, inputTokens: Long, outputTokens: Long) — writes input_tokens and output_tokens INT64 fields
+    2266. commands
+      2268. get write command to include the intent type
   2105. internals
     2228. runtime
       2240. listens on external ports, takes requests and passes them to runtime
@@ -532,6 +534,19 @@
         1343. SubmitOpRequest dispatch
           1345. Implements IntentStreamConsumer.consume(): routes each SubmitOpRequest payload variant to the appropriate mutation method
           1347. consume(request: SubmitOpRequest): CommandResult — dispatches oneof payload: CreateIntent, UpdateIntentText, UpdateIntentParent, AddField, SetFieldValue, InvokeMacro, WriteNoGarbage
+      2270. user authentication module
+        2274. should be included in standard module
+        2277. defines user type
+          2290. user 'name' field should use the same naming approach auto generated for types
+          2293. user type should include string auth token field
+        2280. requests to service should be gated by user
+          2297. all interface requests should include user name and auth token field
+          2300. the service should reject attempts to create intents when no matching username or auth token is found
+        2283. should define a root user by default
+        2286. intents created by non-root users should be marked by their creator
+          2306. when a non-root user's intent is accepted by the runtime, the runtime should instantiate this type on the new intent
+          2310. define a CreatedBy intent in the auth module
+            2303. the CreatedBy intent should have two participants: another intent, and a user instance
 2101. develop voluntas
   2015. The project must be buildable, testable, and runnable via a consistent Gradle toolchain with shell script convenience wrappers
     2017. Gradle build uses the protobuf plugin to generate Kotlin stubs from voluntas.proto; each runnable component has a dedicated JavaExec task

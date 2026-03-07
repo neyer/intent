@@ -1,5 +1,5 @@
-import com.intentevolved.com.intentevolved.FieldDetails
-import com.intentevolved.com.intentevolved.voluntas.*
+import com.apxhard.voluntas.FieldDetails
+import com.apxhard.voluntas.voluntas.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

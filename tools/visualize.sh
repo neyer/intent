@@ -8,4 +8,4 @@ cd "$(dirname "$0")/.."
 # Get classpath
 CLASSPATH=$(./gradlew --quiet printRuntimeClasspath | tail -1)
 
-exec java -cp "$CLASSPATH" com.intentevolved.visualizer.TimelineVisualizerKt "$@"
+exec java -cp "$CLASSPATH" com.apxhard.voluntas.visualizer.TimelineVisualizerKt "$@"

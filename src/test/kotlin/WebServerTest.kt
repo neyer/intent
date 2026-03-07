@@ -1,5 +1,5 @@
-import com.intentevolved.com.intentevolved.server.configureWebApp
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
+import com.apxhard.voluntas.server.configureWebApp
+import com.apxhard.voluntas.voluntas.VoluntasIntentService
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*

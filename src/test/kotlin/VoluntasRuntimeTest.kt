@@ -1,7 +1,7 @@
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentService
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIntentServiceGrpcImpl
-import com.intentevolved.com.intentevolved.voluntas.VoluntasServiceGrpcImpl
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
+import com.apxhard.voluntas.voluntas.VoluntasIntentService
+import com.apxhard.voluntas.voluntas.VoluntasIntentServiceGrpcImpl
+import com.apxhard.voluntas.voluntas.VoluntasServiceGrpcImpl
+import com.apxhard.voluntas.voluntas.VoluntasIds
 import io.grpc.ManagedChannelBuilder
 import io.grpc.ServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService

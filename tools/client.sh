@@ -12,4 +12,4 @@ CLASSPATH=$(./gradlew --quiet printRuntimeClasspath | tail -1)
 HOST="${1:-localhost}"
 PORT="${2:-50051}"
 
-exec java -cp "$CLASSPATH" com.intentevolved.com.intentevolved.terminal.TerminalClientKt "$HOST" "$PORT"
+exec java -cp "$CLASSPATH" com.apxhard.voluntas.terminal.TerminalClientKt "$HOST" "$PORT"

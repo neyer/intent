@@ -1,5 +1,5 @@
-import com.intentevolved.com.intentevolved.voluntas.LiteralStore
-import com.intentevolved.com.intentevolved.voluntas.VoluntasIds
+import com.apxhard.voluntas.voluntas.LiteralStore
+import com.apxhard.voluntas.voluntas.VoluntasIds
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Assertions.*

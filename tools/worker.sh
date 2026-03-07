@@ -8,4 +8,4 @@ cd "$(dirname "$0")/.."
 # Get classpath
 CLASSPATH=$(./gradlew --quiet printRuntimeClasspath | tail -1)
 
-exec java -cp "$CLASSPATH" com.intentevolved.worker.ClaudeWorkerKt "$@"
+exec java -cp "$CLASSPATH" com.apxhard.voluntas.worker.ClaudeWorkerKt "$@"
