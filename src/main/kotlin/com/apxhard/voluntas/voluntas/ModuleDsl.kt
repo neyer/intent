@@ -299,6 +299,18 @@ class MutationBuilder(private val service: VoluntasIntentService) {
         ops.add(MacroOp(VoluntasIds.SETS_FIELD, listOf(target, fieldNameLit, valueLit)))
     }
 
+    /**
+     * Emit a SETS_FIELD op using [valueLitId] as the value participant directly —
+     * it may be a param-reference literal (e.g. [textArg]) rather than a concrete value.
+     */
+    fun setFieldRef(fieldName: String, valueLitId: Long, target: Long = focused) {
+        val fieldNameLit = service.literalStore.getOrCreate(fieldName)
+        ops.add(MacroOp(VoluntasIds.SETS_FIELD, listOf(target, fieldNameLit, valueLitId)))
+    }
+
+    /** The text argument passed to this command invocation — use as a value in [setFieldRef]. */
+    val textArg: Long get() = service.paramRef("textLit")
+
     // Field type shorthand
     val string: FieldType    get() = FieldType.FIELD_TYPE_STRING
     val int: FieldType       get() = FieldType.FIELD_TYPE_INT32

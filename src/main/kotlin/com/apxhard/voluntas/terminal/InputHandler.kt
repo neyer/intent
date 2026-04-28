@@ -523,6 +523,52 @@ class ImportCommand : Command("import") {
 }
 
 /**
+ * Handles the "provide-user-token <token>" command.
+ *
+ * Reads the focused intent's text as the username, stores credentials on the client
+ * via [onCredentialsSet], then invokes the macro normally for the audit-trail record.
+ * Clears credentials via [onCredentialsCleared] if the server rejects the request.
+ */
+class ProvideUserTokenCommand(
+    private val macroEntityId: Long,
+    private val onCredentialsSet: (username: String, authToken: String) -> Unit,
+    private val onCredentialsCleared: () -> Unit
+) : Command("provide-user-token") {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
+        val token = args.trim()
+        if (token.isEmpty()) return CommandResult("Usage: provide-user-token <token>")
+
+        val userIntent = stateProvider.getById(focalIntent)
+            ?: return CommandResult("No intent focused — focus on your user intent first")
+
+        val username = userIntent.text()
+        onCredentialsSet(username, token)
+
+        val request = SubmitOpRequest.newBuilder()
+            .setInvokeMacro(
+                InvokeMacro.newBuilder()
+                    .setMacroEntityId(macroEntityId)
+                    .setTextArg(token)
+                    .setParentId(focalIntent)
+            )
+            .build()
+
+        return try {
+            consumer.consume(request)
+            CommandResult("Authenticated as '$username'")
+        } catch (e: Exception) {
+            onCredentialsCleared()
+            CommandResult("Authentication failed: ${e.message}")
+        }
+    }
+}
+
+/**
  * Invokes a named macro defined in the Voluntas stream.
  *
  * The macro is expected to accept two parameters: textLit (the literal ID of the

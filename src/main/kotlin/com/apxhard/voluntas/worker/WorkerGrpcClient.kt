@@ -11,11 +11,14 @@ import java.util.concurrent.TimeUnit
  */
 class WorkerGrpcClient private constructor(
     private val channel: ManagedChannel,
-    private val stub: IntentServiceGrpc.IntentServiceBlockingStub
+    private val stub: IntentServiceGrpc.IntentServiceBlockingStub,
+    private val username: String,
+    private val authToken: String
 ) {
     companion object {
         /**
          * Intent 14: Connect to the intent server at the given address.
+         * Reads VOLUNTAS_USER and VOLUNTAS_TOKEN from the environment for per-request auth.
          */
         fun connect(address: String): WorkerGrpcClient {
             val parts = address.split(":")
@@ -30,9 +33,14 @@ class WorkerGrpcClient private constructor(
             // Intent 15: Create stub for IntentService
             val stub = IntentServiceGrpc.newBlockingStub(channel)
 
-            return WorkerGrpcClient(channel, stub)
+            val username = System.getenv("VOLUNTAS_USER") ?: ""
+            val authToken = System.getenv("VOLUNTAS_TOKEN") ?: ""
+            return WorkerGrpcClient(channel, stub, username, authToken)
         }
     }
+
+    private fun SubmitOpRequest.Builder.withCredentials(): SubmitOpRequest.Builder =
+        setUsername(username).setAuthToken(authToken)
 
     /**
      * Intent 17: Get an intent by its ID.
@@ -80,6 +88,7 @@ class WorkerGrpcClient private constructor(
 
         val request = SubmitOpRequest.newBuilder()
             .setAddField(addField)
+            .withCredentials()
             .build()
 
         return try {
@@ -101,6 +110,7 @@ class WorkerGrpcClient private constructor(
                     .setFieldName(fieldName)
                     .setTimestampValue(timestampNanos)
             )
+            .withCredentials()
             .build()
 
         return try {
@@ -122,6 +132,7 @@ class WorkerGrpcClient private constructor(
                     .setFieldName(fieldName)
                     .setBoolValue(value)
             )
+            .withCredentials()
             .build()
 
         return try {
@@ -143,6 +154,7 @@ class WorkerGrpcClient private constructor(
                     .setFieldName(fieldName)
                     .setInt64Value(value)
             )
+            .withCredentials()
             .build()
 
         return try {
@@ -164,6 +176,7 @@ class WorkerGrpcClient private constructor(
                     .setFieldName(fieldName)
                     .setStringValue(value)
             )
+            .withCredentials()
             .build()
 
         return try {

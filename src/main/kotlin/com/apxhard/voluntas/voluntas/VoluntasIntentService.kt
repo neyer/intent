@@ -1138,6 +1138,58 @@ class VoluntasIntentService private constructor(
         addParticipant(intentId, newParentId)
     }
 
+    /**
+     * Looks up a user intent by username and auth token.
+     * Returns the user intent entity ID if credentials match, null otherwise.
+     * Requires the auth module to be loaded (i.e. /auth/user type must exist).
+     */
+    fun findUserByCredentials(username: String, authToken: String): Long? {
+        val userTypeId = getEntityByPath("/auth/user") ?: return null
+        return getInstancesOfType(userTypeId).find { id ->
+            val intent = byId[id] ?: return@find false
+            intent.text() == username && intent.fieldValues()["auth-token"] == authToken
+        }
+    }
+
+    /**
+     * Returns the user intent entity ID for [username], or null if not found.
+     */
+    fun findUserByName(username: String): Long? {
+        val userTypeId = getEntityByPath("/auth/user") ?: return null
+        return getInstancesOfType(userTypeId).find { id ->
+            byId[id]?.text() == username
+        }
+    }
+
+    /**
+     * Returns true if the auth module is loaded (i.e. the /auth/user type exists).
+     */
+    fun isAuthModuleLoaded(): Boolean = getEntityByPath("/auth/user") != null
+
+    /**
+     * Creates a CreatedBy meta-intent as a child of [intentId], pointing to [userId].
+     * No-op if the /auth/created-by type is not loaded.
+     */
+    fun createCreatedBy(intentId: Long, userId: Long) {
+        val createdByTypeId = getEntityByPath("/auth/created-by") ?: return
+        val cbId = instantiateType(createdByTypeId, parentId = intentId)
+        setFieldValue(cbId, "user", userId)
+    }
+
+    /**
+     * Ensures a root user with auth-token="root" exists in the stream.
+     * Called after loading modules; no-op if root user already exists or auth module not loaded.
+     */
+    fun bootstrapRootUser() {
+        val userTypeId = getEntityByPath("/auth/user") ?: return
+        val alreadyExists = getInstancesOfType(userTypeId).any { id -> byId[id]?.text() == "root" }
+        if (!alreadyExists) {
+            val rootUser = addIntentOfType(userTypeId, "root", VoluntasIds.ROOT_INTENT)
+            setFieldValue(rootUser.id(), "auth-token", "root")
+            println("Bootstrapped root user (auth-token: 'root')")
+        }
+    }
+
     override fun getAll(): List<Intent> = byId.values.filter { !it.isMeta() }
 
     /** Expose all entities (including meta) for module matching. */

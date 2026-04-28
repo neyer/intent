@@ -4,6 +4,8 @@ import com.apxhard.voluntas.IntentStateProvider
 import com.apxhard.voluntas.IntentStreamConsumer
 import com.apxhard.voluntas.terminal.CommandExecutor
 import com.apxhard.voluntas.terminal.DynamicMacroCommand
+import com.apxhard.voluntas.terminal.ProvideUserTokenCommand
+import com.apxhard.voluntas.voluntas.AuthGate
 import io.ktor.server.websocket.*
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -11,13 +13,16 @@ import java.util.concurrent.ConcurrentHashMap
 class WebSessionState(
     val sessionId: String,
     val executor: CommandExecutor,
-    var focalIntent: Long = 0L
+    var focalIntent: Long = 0L,
+    var username: String? = null,
+    var authToken: String? = null
 )
 
 class SessionManager(
     private val consumer: IntentStreamConsumer,
     private val stateProvider: IntentStateProvider,
-    private val commandAnnotations: List<Pair<String, Long>> = emptyList()
+    private val commandAnnotations: List<Pair<String, Long>> = emptyList(),
+    private val authGate: AuthGate? = null
 ) {
     private val sessions = ConcurrentHashMap<String, WebSessionState>()
     private val connections = ConcurrentHashMap<String, WebSocketServerSession>()
@@ -27,11 +32,26 @@ class SessionManager(
             sessions[sessionId]?.let { return it }
         }
         val id = sessionId ?: UUID.randomUUID().toString()
-        val executor = CommandExecutor(consumer, stateProvider, null)
+        lateinit var session: WebSessionState
+        session = WebSessionState(sessionId = id, executor = CommandExecutor(
+            consumer = if (authGate != null)
+                authGate.authenticatingConsumer(consumer) { session.username to session.authToken }
+            else
+                consumer,
+            stateProvider = stateProvider,
+            writeFileName = null
+        ))
         for ((keyword, macroId) in commandAnnotations) {
-            executor.registerCommand(DynamicMacroCommand(keyword, macroId))
+            if (keyword == "provide-user-token") {
+                session.executor.registerCommand(ProvideUserTokenCommand(
+                    macroEntityId = macroId,
+                    onCredentialsSet = { u, t -> session.username = u; session.authToken = t },
+                    onCredentialsCleared = { session.username = null; session.authToken = null }
+                ))
+            } else {
+                session.executor.registerCommand(DynamicMacroCommand(keyword, macroId))
+            }
         }
-        val session = WebSessionState(sessionId = id, executor = executor)
         sessions[id] = session
         return session
     }

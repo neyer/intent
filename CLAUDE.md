@@ -61,7 +61,9 @@ Writes `input_tokens` and `output_tokens` as INT64 fields on the intent.
 When the user gives a task prompt, follow these steps if the intent server is reachable
 (probe with `./tools/intent-get.sh 0` — skip all intent steps silently if it fails):
 
-### 1. Find the right parent and create a requirement intent
+### 1. Find the right parent and create a requirement intent, if necessary.
+
+**If the user gives an existing intent ID**, saying 'do this intent', there is no need to make a new one. The same is true if they give a text file with a printout of a an ID and all its children.
 
 **If the user specifies a parent** (e.g. "put this under intent 42"), use that ID directly.
 
@@ -86,6 +88,8 @@ REQUIREMENT_ID=$(./tools/intent-add.sh "<one-line summary of the task>" $PARENT_
 
 ### 2. Add system intents for each major area of work
 
+If the 'system' intents haven't yet been specified, you'lll need to add them, if you are working at a level that requires desining systems.
+
 Break the task into its major sub-problems and add a system intent for each one under the
 requirement. Do this before writing any code:
 
@@ -95,7 +99,7 @@ SYSTEM_ID=$(./tools/intent-add.sh "<what this part of the work achieves>" $REQUI
 
 ### 3. Add implementation intents for each concrete change
 
-Under each system, add an implementation intent for every file or component you will touch:
+Under each system you create, you'lll want add an implementation intent for every file or component you will touch. Note that you may not need to do this if you've been told to implement an existing intent that already has 'system' and 'implementation 'requirements beneath it.
 
 ```
 IMPL_ID=$(./tools/intent-add.sh "<specific file/change description>" $SYSTEM_ID | jq -r '.id')

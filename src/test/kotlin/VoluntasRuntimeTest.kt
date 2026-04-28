@@ -1,3 +1,4 @@
+import com.apxhard.voluntas.voluntas.AuthGate
 import com.apxhard.voluntas.voluntas.VoluntasIntentService
 import com.apxhard.voluntas.voluntas.VoluntasIntentServiceGrpcImpl
 import com.apxhard.voluntas.voluntas.VoluntasServiceGrpcImpl
@@ -42,7 +43,7 @@ class VoluntasRuntimeTest {
 
             server = ServerBuilder
                 .forPort(0) // random free port
-                .addService(VoluntasIntentServiceGrpcImpl(service, fileName, stateDispatcher))
+                .addService(VoluntasIntentServiceGrpcImpl(service, fileName, stateDispatcher, AuthGate(service)))
                 .addService(VoluntasServiceGrpcImpl(service, fileName, stateDispatcher))
                 .addService(ProtoReflectionService.newInstance())
                 .build()

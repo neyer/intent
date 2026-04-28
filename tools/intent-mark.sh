@@ -1,6 +1,8 @@
 #!/bin/bash
 # Helper script to mark intents as started/completed
 # Usage: ./intent-mark.sh <start|complete|done> <intent-id> [server]
+#
+# Auth: set VOLUNTAS_USER and VOLUNTAS_TOKEN env vars when the auth module is loaded.
 
 ACTION=$1
 INTENT_ID=$2
@@ -12,24 +14,41 @@ if [ -z "$ACTION" ] || [ -z "$INTENT_ID" ]; then
 fi
 
 TIMESTAMP=$(date +%s%N)
+USER="${VOLUNTAS_USER:-}"
+TOKEN="${VOLUNTAS_TOKEN:-}"
+
+submit() {
+    grpcurl -plaintext -d "$1" "$SERVER" voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
+}
+
+add_timestamp_field() {
+    local field="$1"
+    submit "$(jq -n --argjson id "$INTENT_ID" --arg field "$field" \
+        --arg user "$USER" --arg token "$TOKEN" \
+        '{add_field: {intentId: $id, fieldName: $field, fieldType: 8}, username: $user, authToken: $token}')"
+    submit "$(jq -n --argjson id "$INTENT_ID" --arg field "$field" \
+        --argjson ts "$TIMESTAMP" \
+        --arg user "$USER" --arg token "$TOKEN" \
+        '{set_field_value: {intentId: $id, fieldName: $field, timestamp_value: $ts}, username: $user, authToken: $token}')"
+}
 
 case $ACTION in
     start)
-        grpcurl -plaintext -d "{\"add_field\": {\"intentId\": $INTENT_ID, \"fieldName\": \"started\", \"fieldType\": 8}}" $SERVER voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
-        grpcurl -plaintext -d "{\"set_field_value\": {\"intentId\": $INTENT_ID, \"fieldName\": \"started\", \"timestamp_value\": \"$TIMESTAMP\"}}" $SERVER voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
+        add_timestamp_field "started"
         echo "Started intent $INTENT_ID"
         ;;
     complete)
-        grpcurl -plaintext -d "{\"add_field\": {\"intentId\": $INTENT_ID, \"fieldName\": \"completed\", \"fieldType\": 8}}" $SERVER voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
-        grpcurl -plaintext -d "{\"set_field_value\": {\"intentId\": $INTENT_ID, \"fieldName\": \"completed\", \"timestamp_value\": \"$TIMESTAMP\"}}" $SERVER voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
+        add_timestamp_field "completed"
         echo "Completed intent $INTENT_ID"
         ;;
     done)
-        # Mark as completed with timestamp AND set done=true
-        grpcurl -plaintext -d "{\"add_field\": {\"intentId\": $INTENT_ID, \"fieldName\": \"completed\", \"fieldType\": 8}}" $SERVER voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
-        grpcurl -plaintext -d "{\"set_field_value\": {\"intentId\": $INTENT_ID, \"fieldName\": \"completed\", \"timestamp_value\": \"$TIMESTAMP\"}}" $SERVER voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
-        grpcurl -plaintext -d "{\"add_field\": {\"intentId\": $INTENT_ID, \"fieldName\": \"done\", \"fieldType\": 6}}" $SERVER voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
-        grpcurl -plaintext -d "{\"set_field_value\": {\"intentId\": $INTENT_ID, \"fieldName\": \"done\", \"bool_value\": true}}" $SERVER voluntas.v1.IntentService/SubmitOp > /dev/null 2>&1
+        add_timestamp_field "completed"
+        submit "$(jq -n --argjson id "$INTENT_ID" \
+            --arg user "$USER" --arg token "$TOKEN" \
+            '{add_field: {intentId: $id, fieldName: "done", fieldType: 6}, username: $user, authToken: $token}')"
+        submit "$(jq -n --argjson id "$INTENT_ID" \
+            --arg user "$USER" --arg token "$TOKEN" \
+            '{set_field_value: {intentId: $id, fieldName: "done", bool_value: true}, username: $user, authToken: $token}')"
         echo "Done intent $INTENT_ID"
         ;;
     *)

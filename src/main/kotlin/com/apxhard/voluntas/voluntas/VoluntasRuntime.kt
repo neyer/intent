@@ -26,7 +26,8 @@ class VoluntasRuntime(
     // this enforces that there's exactly one thread messing with the service
     private val stateDispatcher: CloseableCoroutineDispatcher = newSingleThreadContext("intent-state")
 
-    private val intentServiceGrpc = VoluntasIntentServiceGrpcImpl(service, fileName, stateDispatcher)
+    private val authGate = AuthGate(service)
+    private val intentServiceGrpc = VoluntasIntentServiceGrpcImpl(service, fileName, stateDispatcher, authGate)
     private val voluntasServiceGrpc = VoluntasServiceGrpcImpl(service, fileName, stateDispatcher)
 
     private val server: Server = ServerBuilder
@@ -48,7 +49,7 @@ class VoluntasRuntime(
 
         if (webPort != null) {
             println("Voluntas web server started on port $port")
-            val ws = IntentWebServer(webPort, service, service, stateDispatcher, service.getCommandAnnotations()) {
+            val ws = IntentWebServer(webPort, service, service, stateDispatcher, service.getCommandAnnotations(), authGate) {
                 service.writeToFile(fileName)
             }
             ws.start()
@@ -88,6 +89,7 @@ class VoluntasRuntime(
             }
         }
 
+        service.bootstrapRootUser()
         service.writeToFile(fileName)
         println("Modules loaded, stream saved")
 
@@ -147,12 +149,17 @@ class VoluntasRuntime(
  * gRPC impl for the IntentService endpoints, backed by VoluntasIntentService.
  *
  * Delegates to service.consume(SubmitOpRequest) for all mutations.
+ *
+ * Auth: when the auth module is loaded, all write ops require the client to have
+ * previously called `provide-user-token` (via InvokeMacro) to establish session state.
+ * Reads (getIntent, getFocalScope, getCommands) are always allowed.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class VoluntasIntentServiceGrpcImpl(
     private val service: VoluntasIntentService,
     private val fileName: String,
-    private val stateDispatcher: CloseableCoroutineDispatcher
+    private val stateDispatcher: CloseableCoroutineDispatcher,
+    private val authGate: AuthGate
 ) : IntentServiceGrpcKt.IntentServiceCoroutineImplBase() {
 
     var onMutation: (suspend () -> Unit)? = null
@@ -160,10 +167,22 @@ class VoluntasIntentServiceGrpcImpl(
     override suspend fun submitOp(request: SubmitOpRequest): SubmitOpResponse {
         val response = withContext(stateDispatcher) {
             try {
-                val result = service.consume(request)
-                service.writeToFile(fileName)
+                val authResult = try {
+                    authGate.validate(
+                        if (request.hasUsername()) request.username else null,
+                        if (request.hasAuthToken()) request.authToken else null
+                    )
+                } catch (e: AuthException) {
+                    return@withContext SubmitOpResponse.newBuilder()
+                        .setSuccess(false)
+                        .setMessage(e.message ?: "Authentication failed")
+                        .build()
+                }
 
-                val id = extractIdFromResult(result.message)
+                val result = service.consume(request)
+                val id = authGate.extractNewIntentId(result.message)
+                authGate.annotateCreatedBy(id, authResult)
+                service.writeToFile(fileName)
 
                 SubmitOpResponse.newBuilder()
                     .setSuccess(true)
@@ -180,12 +199,6 @@ class VoluntasIntentServiceGrpcImpl(
         }
         if (response.success) onMutation?.invoke()
         return response
-    }
-
-    private fun extractIdFromResult(message: String): Long {
-        val regex = Regex("intent (\\d+)")
-        val match = regex.find(message)
-        return match?.groupValues?.get(1)?.toLongOrNull() ?: 0L
     }
 
     override suspend fun getIntent(request: GetIntentRequest): GetIntentResponse {

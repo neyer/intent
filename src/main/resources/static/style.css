@@ -41,6 +41,10 @@ body {
     color: #8be9fd;
 }
 
+#result-text.error {
+    color: #ff5555;
+}
+
 /* Intent tree */
 #intent-tree {
     margin-top: 16px;

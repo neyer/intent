@@ -5,6 +5,7 @@ import com.apxhard.voluntas.Intent
 import com.apxhard.voluntas.IntentStateProvider
 import com.apxhard.voluntas.IntentStreamConsumer
 import com.apxhard.voluntas.terminal.CommandExecutor
+import com.apxhard.voluntas.voluntas.AuthGate
 import com.google.gson.Gson
 import io.ktor.http.*
 import io.ktor.serialization.gson.*
@@ -27,15 +28,16 @@ class IntentWebServer(
     private val consumer: IntentStreamConsumer,
     private val stateDispatcher: CoroutineDispatcher,
     private val commandAnnotations: List<Pair<String, Long>> = emptyList(),
+    private val authGate: AuthGate? = null,
     private val onMutation: suspend () -> Unit = {}
 ) {
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
-    private val sessionManager = SessionManager(consumer, stateProvider, commandAnnotations)
+    private val sessionManager = SessionManager(consumer, stateProvider, commandAnnotations, authGate)
     private val gson = Gson()
 
     fun start() {
         server = embeddedServer(Netty, port = port) {
-            configureWebApp(stateProvider, consumer, stateDispatcher, onMutation, sessionManager, gson)
+            configureWebApp(stateProvider, consumer, stateDispatcher, onMutation, sessionManager, gson, authGate)
         }.start(wait = false)
         println("Web server started on port $port")
     }
@@ -65,7 +67,8 @@ fun Application.configureWebApp(
     stateDispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
     onMutation: suspend () -> Unit = {},
     sessionManager: SessionManager = SessionManager(consumer, stateProvider),
-    gson: Gson = Gson()
+    gson: Gson = Gson(),
+    authGate: AuthGate? = null
 ) {
     install(ContentNegotiation) {
         gson()
@@ -172,10 +175,14 @@ fun Application.configureWebApp(
                         val msg = gson.fromJson(text, Map::class.java)
                         val command = msg["command"] as? String ?: continue
 
-                        val (result, newFocalIntent) = withContext(stateDispatcher) {
-                            val pair = session.executor.execute(command, session.focalIntent)
-                            onMutation()
-                            pair
+                        val (result, newFocalIntent) = try {
+                            withContext(stateDispatcher) {
+                                val pair = session.executor.execute(command, session.focalIntent)
+                                onMutation()
+                                pair
+                            }
+                        } catch (e: Exception) {
+                            (e.message ?: "Error") to session.focalIntent
                         }
                         session.focalIntent = newFocalIntent
 

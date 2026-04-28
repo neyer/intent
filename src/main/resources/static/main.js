@@ -14,7 +14,12 @@ function connect() {
         const msg = JSON.parse(event.data);
         if (msg.type === "scope") {
             if (msg.result !== undefined) {
-                document.getElementById("result-text").textContent = msg.result;
+                const el = document.getElementById("result-text");
+                el.textContent = msg.result;
+                const isError = msg.result.toLowerCase().startsWith("not authenticated") ||
+                                msg.result.toLowerCase().startsWith("invalid credentials") ||
+                                msg.result.toLowerCase().startsWith("error");
+                el.classList.toggle("error", isError);
             }
             renderTree(msg);
         } else if (msg.type === "tree_update") {

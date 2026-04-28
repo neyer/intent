@@ -48,7 +48,15 @@ fun runTerminal(client: IntentGrpcClient) {
     try {
         val commands = client.getCommands()
         for (cmd in commands) {
-            handler.registerCommand(DynamicMacroCommand(cmd.keyword, cmd.macroEntityId))
+            if (cmd.keyword == "provide-user-token") {
+                handler.registerCommand(ProvideUserTokenCommand(
+                    macroEntityId = cmd.macroEntityId,
+                    onCredentialsSet = { u, t -> client.setCredentials(u, t) },
+                    onCredentialsCleared = { client.clearCredentials() }
+                ))
+            } else {
+                handler.registerCommand(DynamicMacroCommand(cmd.keyword, cmd.macroEntityId))
+            }
         }
     } catch (e: Exception) {
         // Non-fatal: server may not have any dynamic commands or module not loaded.
@@ -152,6 +160,9 @@ private fun formatEpochNanosAsLocalMinute(epochNanos: Long): String {
 
 /**
  * gRPC client that implements IntentStreamConsumer and IntentStateProvider.
+ *
+ * Credentials are set by [setCredentials] (called by [ProvideUserTokenCommand] after a
+ * successful login) and attached to every [consume] call automatically.
  */
 class IntentGrpcClient(
     channel: ManagedChannel
@@ -159,8 +170,27 @@ class IntentGrpcClient(
 
     private val stub = IntentServiceGrpc.newBlockingStub(channel)
 
+    private var username: String = System.getenv("VOLUNTAS_USER") ?: ""
+    private var authToken: String = System.getenv("VOLUNTAS_TOKEN") ?: ""
+
+    fun setCredentials(username: String, authToken: String) {
+        this.username = username
+        this.authToken = authToken
+    }
+
+    fun clearCredentials() {
+        username = ""
+        authToken = ""
+    }
+
+    fun currentUsername(): String = username
+
     override fun consume(request: SubmitOpRequest): CommandResult {
-        val response = stub.submitOp(request)
+        val augmented = request.toBuilder()
+            .setUsername(username)
+            .setAuthToken(authToken)
+            .build()
+        val response = stub.submitOp(augmented)
 
         return if (response.success) {
             CommandResult(response.message, id = response.id)

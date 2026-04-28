@@ -250,6 +250,9 @@ message SubmitOpRequest {
     WriteNoGarbage write_no_garbage = 7;
     AddIntentParent add_intent_parent = 8;
   }
+  // Per-request credentials. Required when the auth module is loaded on the server.
+  optional string username   = 10;
+  optional string auth_token = 11;
 }
 
 message SubmitOpResponse {
