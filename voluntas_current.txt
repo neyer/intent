@@ -695,3 +695,6 @@
 2441. root
     auth-token: root
   2450. root
+  2459. root
+2456. claude-bot
+    auth-token: claude-token
