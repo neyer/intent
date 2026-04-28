@@ -169,8 +169,8 @@ class VoluntasIntentServiceGrpcImpl(
             try {
                 val authResult = try {
                     authGate.validate(
-                        if (request.hasUsername()) request.username else null,
-                        if (request.hasAuthToken()) request.authToken else null
+                        request.username.takeIf { it.isNotEmpty() },
+                        request.authToken.takeIf { it.isNotEmpty() }
                     )
                 } catch (e: AuthException) {
                     return@withContext SubmitOpResponse.newBuilder()

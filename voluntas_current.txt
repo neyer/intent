@@ -4,6 +4,7 @@
   1000. software
   1065. standard
   2405. auth
+  2465. agents
 2078. represent intents
   1093. Represent any intent as a node in a typed, persistent relationship graph
     1095. Foundation: every entity the system manages is an Intent with id, text, parent/children, optional typed fields, and timestamps
@@ -696,5 +697,14 @@
     auth-token: root
   2450. root
   2459. root
+  2500. root
 2456. claude-bot
     auth-token: claude-token
+  2491. please have those prompts be rooted under claude-bot
+  2482. please confirm that this works
+  2485. please test it one more time, for old times' sake
+  2488. I can see it there, so it's working. The next step: please have those prompts be rooted under the user claude-bot rather than under the root intent.
+2493. test req
+    deleted: true
+2497. type test
+    deleted: true
