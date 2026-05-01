@@ -22,7 +22,8 @@ class SessionManager(
     private val consumer: IntentStreamConsumer,
     private val stateProvider: IntentStateProvider,
     private val commandAnnotations: List<Pair<String, Long>> = emptyList(),
-    private val authGate: AuthGate? = null
+    private val authGate: AuthGate? = null,
+    private val writeFileName: String? = null
 ) {
     private val sessions = ConcurrentHashMap<String, WebSessionState>()
     private val connections = ConcurrentHashMap<String, WebSocketServerSession>()
@@ -39,7 +40,7 @@ class SessionManager(
             else
                 consumer,
             stateProvider = stateProvider,
-            writeFileName = null
+            writeFileName = writeFileName
         ))
         for ((keyword, macroId) in commandAnnotations) {
             if (keyword == "provide-user-token") {

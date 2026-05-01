@@ -404,21 +404,20 @@ class AddParentCommand : Command("add-parent") {
     }
 }
 
-class WriteNoGarbageCommand : Command("write-no-garbage") {
+class WriteNoGarbageCommand(private val fileName: String?) : Command("write-no-garbage") {
     override fun process(
         args: String,
         consumer: IntentStreamConsumer,
         stateProvider: IntentStateProvider,
         focalIntent: Long
     ): CommandResult {
-        val filePath = args.trim()
-        if (filePath.isEmpty()) {
-            return CommandResult("write-no-garbage requires a file path")
+        if (fileName == null) {
+            return CommandResult("write-no-garbage: no file configured for this session")
         }
 
         val request = SubmitOpRequest.newBuilder()
             .setWriteNoGarbage(
-                voluntas.v1.WriteNoGarbage.newBuilder().setFilePath(filePath)
+                voluntas.v1.WriteNoGarbage.newBuilder().setFilePath(fileName)
             )
             .build()
 
@@ -602,7 +601,7 @@ class DynamicMacroCommand(
 class CommandExecutor(
     private val consumer: IntentStreamConsumer,
     private val stateProvider: IntentStateProvider,
-    writeFileName: String?
+    private val writeFileName: String?
 ) {
     private val commands = mutableListOf<Command>(
         AddCommand(),
@@ -614,7 +613,7 @@ class CommandExecutor(
         DoCommand(),
         DeleteCommand(),
         WriteCommand(),
-        WriteNoGarbageCommand(),
+        WriteNoGarbageCommand(writeFileName),
         ImportCommand()
     )
 

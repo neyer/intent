@@ -18,8 +18,8 @@ import java.io.File
  */
 fun main() {
     val service = buildModule("auth") {
-        // "user <name>" — creates a visible user intent; auth-token is set via change-auth-token
-        command("user") {
+        // "user <name>" — creates a meta user intent (hidden from visible tree); auth-token set via change-auth-token
+        command("user", meta = true) {
             field("auth-token", string, required = true, description = "Authentication token for this user")
         }
 

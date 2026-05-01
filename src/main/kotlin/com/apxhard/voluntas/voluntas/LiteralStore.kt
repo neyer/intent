@@ -90,6 +90,24 @@ class LiteralStore {
     /** Number of literals in the store. */
     fun size(): Int = byId.size
 
+    /** Clear all literals and re-register the bootstrap set. */
+    fun reset() {
+        byValue.clear()
+        byId.clear()
+        nextOrdinal = 7L
+        registerBootstrap(1L, "defines_type")
+        registerBootstrap(2L, "defines_field")
+        registerBootstrap(3L, "instantiates")
+        registerBootstrap(4L, "sets_field")
+        registerBootstrap(5L, "adds_participant")
+        registerBootstrap(6L, "depends_on")
+        registerBootstrap(7L, "text")
+        registerBootstrap(8L, "parent")
+        registerBootstrap(9L, "STRING")
+        registerBootstrap(10L, "INTENT_REF")
+        nextOrdinal = 11L
+    }
+
     /**
      * Register an externally-created literal (e.g. during replay from a Stream).
      * Updates the nextOrdinal if needed to avoid collisions.

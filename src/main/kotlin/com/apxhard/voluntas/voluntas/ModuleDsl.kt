@@ -68,14 +68,17 @@ class ModuleBuilder(
      * Define a macro-backed terminal command.
      *
      * Creates:
-     * - A visible string-subtype at "[moduleName]/[keyword]" — instances appear in the intent tree
+     * - A string-subtype at "[moduleName]/[keyword]"
      * - Any fields declared in [block] on that type
      * - A macro at "[moduleName]/add-[keyword]" with params `textLit`, `parentId`
      * - A command annotation that links the macro to the CLI keyword "[keyword]"
      *
+     * If [meta] is true, instances are marked isMeta=true and hidden from the visible
+     * intent tree, while still storing text and supporting the same participant layout.
+     *
      * Terminal usage after loading this module:  `note Some freeform text`
      */
-    fun command(keyword: String, block: TypeBuilder.() -> Unit = {}) {
+    fun command(keyword: String, meta: Boolean = false, block: TypeBuilder.() -> Unit = {}) {
         val builder = TypeBuilder()
         builder.block()
 
@@ -85,6 +88,10 @@ class ModuleBuilder(
             parentTypeId = VoluntasIds.STRING_INTENT_TYPE,
             autoNameInstances = true
         )
+
+        if (meta) {
+            service.setFieldValue(typeId, "meta-instances", true)
+        }
 
         for ((name, type, required, description) in builder.fields) {
             service.addField(typeId, name, type, required, description)

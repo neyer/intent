@@ -29,10 +29,11 @@ class IntentWebServer(
     private val stateDispatcher: CoroutineDispatcher,
     private val commandAnnotations: List<Pair<String, Long>> = emptyList(),
     private val authGate: AuthGate? = null,
+    private val writeFileName: String? = null,
     private val onMutation: suspend () -> Unit = {}
 ) {
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
-    private val sessionManager = SessionManager(consumer, stateProvider, commandAnnotations, authGate)
+    private val sessionManager = SessionManager(consumer, stateProvider, commandAnnotations, authGate, writeFileName)
     private val gson = Gson()
 
     fun start() {

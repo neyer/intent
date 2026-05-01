@@ -549,8 +549,6 @@
               completed: 1775077974435489565
               done: true
           2300. the service should reject attempts to create intents when no matching username or auth token is found
-          2331. auth is session-based: user authenticates once per connection by providing username and auth token, runtime tracks auth state for the session
-              deleted: true
           2332. auth gating applies to write operations only; read requests do not require authentication
         2283. should define a root user by default
           2318. any intents created by the runtime itself are considered to be created by the root user
@@ -693,18 +691,3 @@
       2324. confirm the new featur eworks
       2325. create release candidate and push to dev
       2326. create pc lite
-2441. root
-    auth-token: root
-  2450. root
-  2459. root
-  2500. root
-2456. claude-bot
-    auth-token: claude-token
-  2491. please have those prompts be rooted under claude-bot
-  2482. please confirm that this works
-  2485. please test it one more time, for old times' sake
-  2488. I can see it there, so it's working. The next step: please have those prompts be rooted under the user claude-bot rather than under the root intent.
-2493. test req
-    deleted: true
-2497. type test
-    deleted: true

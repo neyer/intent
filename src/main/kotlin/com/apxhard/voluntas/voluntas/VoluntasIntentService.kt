@@ -94,6 +94,9 @@ class VoluntasIntentService private constructor(
     // Types whose instances are visible (non-meta) intents with text — starts with STRING_INTENT_TYPE
     // and grows as subtypes are declared via DEFINES_TYPE participants[2].
     private val visibleTypes = mutableSetOf(VoluntasIds.STRING_INTENT_TYPE)
+    // Types whose instances use the visible participant layout (textLit, parentId) but are isMeta=true.
+    // Populated when a type entity has meta-instances=true set via SETS_FIELD.
+    private val metaVisibleTypes = mutableSetOf<Long>()
     // All instances of each type, keyed by type entity ID.
     private val instancesByType = mutableMapOf<Long, MutableList<Long>>()
 
@@ -422,9 +425,9 @@ class VoluntasIntentService private constructor(
             return
         }
 
-        if (typeId in visibleTypes) {
-            // Visible type: create a non-meta intent with text from participants[2].
-            // Covers STRING_INTENT_TYPE and any declared subtypes (e.g. /standard/note).
+        if (typeId in visibleTypes || typeId in metaVisibleTypes) {
+            // Visible (or meta-visible) type: text from participants[2], parent from participants[3].
+            // meta-visible types use the same layout but produce isMeta=true intents.
             val textLitId = if (participants.size >= 3) participants[2] else null
             val parentEntityId = if (participants.size >= 4) participants[3] else null
             val text = if (textLitId != null) literalStore.getString(textLitId) ?: "" else ""
@@ -437,7 +440,7 @@ class VoluntasIntentService private constructor(
                 participantIds = if (parentEntityId != null) mutableListOf(parentEntityId) else mutableListOf(),
                 stateProvider = this,
                 createdTimestamp = timestamp,
-                isMeta = false,
+                isMeta = typeId in metaVisibleTypes,
                 typeName = visibleTypeName
             )
             byId[entityId] = intent
@@ -549,7 +552,12 @@ class VoluntasIntentService private constructor(
                         lit.hasBytesVal()  -> lit.bytesVal.toByteArray()
                         else -> return
                     }
-                    if (fieldName == "auto-name-instances" && value == true) {
+                    if (fieldName == "meta-instances" && value == true) {
+                        // Internal flag — instances of this type are isMeta=true but use the
+                        // visible participant layout (textLit at [2], parent at [3]).
+                        visibleTypes.remove(targetId)
+                        metaVisibleTypes.add(targetId)
+                    } else if (fieldName == "auto-name-instances" && value == true) {
                         // Internal flag — populate typeAutoNames; don't expose as a user field.
                         typeAutoNames.add(targetId)
                     } else {
@@ -1312,6 +1320,38 @@ class VoluntasIntentService private constructor(
         }
     }
 
+    /**
+     * Clears all in-memory state and replays the stream from [fileName].
+     * Used after writeNoGarbageToFile so the running service reflects the compacted state.
+     */
+    fun reloadFromFile(fileName: String) {
+        val file = File(fileName)
+        if (!file.exists()) throw IllegalArgumentException("No such file $fileName")
+        val stream = FileInputStream(file).use { Stream.parseFrom(it) }
+
+        literalStore.reset()
+        ops.clear()
+        byId.clear()
+        childrenById.clear()
+        nextEntityId = VoluntasIds.FIRST_USER_ENTITY
+        macros.clear()
+        visibleTypes.clear()
+        visibleTypes.add(VoluntasIds.STRING_INTENT_TYPE)
+        metaVisibleTypes.clear()
+        instancesByType.clear()
+        nameNodeToPath.clear()
+        nameNodeToPath[VoluntasIds.NAMES_ROOT] = ""
+        namesByPath.clear()
+        nameNodeByReferent.clear()
+        referentByNameNode.clear()
+        typeAutoNames.clear()
+
+        replayStream(stream)
+        migrateBootstrap()
+    }
+
+    fun isMetaVisibleType(typeId: Long): Boolean = typeId in metaVisibleTypes
+
     // --- IntentStreamConsumer implementation ---
 
     override fun consume(request: SubmitOpRequest): CommandResult {
@@ -1365,7 +1405,8 @@ class VoluntasIntentService private constructor(
             SubmitOpRequest.PayloadCase.WRITE_NO_GARBAGE -> {
                 val filePath = request.writeNoGarbage.filePath
                 writeNoGarbageToFile(filePath)
-                CommandResult("Wrote clean state to $filePath")
+                reloadFromFile(filePath)
+                CommandResult("Compacted and reloaded from $filePath")
             }
             SubmitOpRequest.PayloadCase.ADD_INTENT_PARENT -> {
                 val op = request.addIntentParent
