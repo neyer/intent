@@ -785,7 +785,7 @@ class VoluntasIntentService private constructor(
      * The type must be a visible subtype of STRING_INTENT_TYPE so that [text] is stored as the
      * intent's display text. Use [getAllEntities] to find a type ID by its name.
      */
-    fun addIntentOfType(typeId: Long, text: String, parentId: Long): Intent {
+    fun addIntentOfType(typeId: Long, text: String, parentId: Long? = null): Intent {
         val id = nextEntityId++
         val textLitId = literalStore.getOrCreate(text)
         val builder = Relationship.newBuilder()
@@ -793,7 +793,9 @@ class VoluntasIntentService private constructor(
             .addParticipants(VoluntasIds.INSTANTIATES)
             .addParticipants(typeId)
             .addParticipants(textLitId)
-            .addParticipants(parentId)
+
+        if (parentId != null)
+            builder.addParticipants(parentId)
 
         emitRelationship(builder.build())
         return byId[id]!!
@@ -1192,7 +1194,7 @@ class VoluntasIntentService private constructor(
         val userTypeId = getEntityByPath("/auth/user") ?: return
         val alreadyExists = getInstancesOfType(userTypeId).any { id -> byId[id]?.text() == "root" }
         if (!alreadyExists) {
-            val rootUser = addIntentOfType(userTypeId, "root", VoluntasIds.ROOT_INTENT)
+            val rootUser = addIntentOfType(userTypeId, "root")
             setFieldValue(rootUser.id(), "auth-token", "root")
             println("Bootstrapped root user (auth-token: 'root')")
         }
