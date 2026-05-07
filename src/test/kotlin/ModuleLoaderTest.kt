@@ -180,7 +180,7 @@ class ModuleLoaderTest {
         val moduleRoot = mainService.getById(manifest.moduleEntityId)
         assertNotNull(moduleRoot)
         assertEquals("Software Development Module", moduleRoot!!.text())
-        assertFalse(moduleRoot.isMeta())
+        assertTrue(moduleRoot.isMeta()) // module roots live under META_ROOT, so they inherit isMeta=true
     }
 
     @Test

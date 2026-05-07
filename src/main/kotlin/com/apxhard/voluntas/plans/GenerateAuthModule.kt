@@ -1,5 +1,6 @@
 package com.apxhard.voluntas.plans
 
+import com.apxhard.voluntas.voluntas.VoluntasIds
 import com.apxhard.voluntas.voluntas.buildModule
 import java.io.File
 
@@ -19,7 +20,7 @@ import java.io.File
 fun main() {
     val service = buildModule("auth") {
         // "user <name>" — creates a meta user intent (hidden from visible tree); auth-token set via change-auth-token
-        command("user", meta = true) {
+        command("user", fixedParent = VoluntasIds.META_ROOT) {
             field("auth-token", string, required = true, description = "Authentication token for this user")
         }
 

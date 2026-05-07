@@ -125,7 +125,7 @@ fun main() {
     note("Low-level event-sourced storage engine: relationships, literals, bootstrap IDs, and the main replay and mutation loop", sysBackend.id())
 
     val fVoluntasIds = file("VoluntasIds.kt", sysBackend.id())
-    note("Compile-time constants for all bootstrap entity IDs (0–14); these IDs are stable across all stream files — changing them would corrupt existing data", fVoluntasIds.id())
+    note("Compile-time constants for all bootstrap entity IDs (0–15); these IDs are stable across all stream files — changing them would corrupt existing data", fVoluntasIds.id())
     val cVoluntasIds = clazz("VoluntasIds", fVoluntasIds.id())
     note("Object with named Long constants for every bootstrap relationship type, meta entity, and structural node", cVoluntasIds.id())
     method("DEFINES_TYPE = 1L — relationship op: entity A defines a new type identified as B", cVoluntasIds.id())
@@ -135,12 +135,14 @@ fun main() {
     method("ADDS_PARTICIPANT = 5L — relationship op: appends a participant to entity A", cVoluntasIds.id())
     method("DEFINES_MACRO = 6L — relationship op: entity A is a macro with name literal B and param-names literal C", cVoluntasIds.id())
     method("STRING_INTENT_TYPE = 7L — the base string/text type; all visible intents instantiate this or a subtype of it", cVoluntasIds.id())
+    method("MARKS_META = 8L — relationship op: explicitly marks target entity (participants[1]) as isMeta=true; used to bootstrap META_ROOT and available for future explicit meta-marking", cVoluntasIds.id())
     method("DEFINES_MACRO_OP = 9L — relationship op: appends one body step to macro A's op list", cVoluntasIds.id())
     method("INVOKES_MACRO = 10L — relationship op: invokes macro A with arg list literal B under parent C", cVoluntasIds.id())
     method("NAME_TYPE = 11L — the type for name-path namespace nodes", cVoluntasIds.id())
-    method("META_ROOT = 12L — root of the meta (type/macro) subtree, parent of all type entities", cVoluntasIds.id())
+    method("META_ROOT = 12L — root of the meta subtree; explicitly marked isMeta=true via MARKS_META; all intents created under META_ROOT inherit isMeta=true from their parent", cVoluntasIds.id())
     method("NAMES_ROOT = 13L — root of the name-path namespace", cVoluntasIds.id())
     method("META_NAME_NODE = 14L — name node entity for the meta root", cVoluntasIds.id())
+    method("MARKS_META_OP = 15L — entity ID of the bootstrap op record that applies MARKS_META to META_ROOT; reserves this slot in the bootstrap ID space", cVoluntasIds.id())
     method("FIRST_USER_ENTITY = 1000L — first entity ID available for user and module allocation", cVoluntasIds.id())
 
     val fVoluntasIntentService = file("VoluntasIntentService.kt", sysBackend.id())
@@ -160,8 +162,9 @@ fun main() {
     // Bootstrap
     val cgrpBootstrap = clazz("Bootstrap and name-path namespace methods", fVoluntasIntentService.id())
     note("Emit and migrate the well-known bootstrap entities; maintain the '/segment/segment' path namespace for types and macros", cgrpBootstrap.id())
-    method("emitBootstrap() — emits Relationship ops for bootstrap IDs 1–14 into a brand-new stream", cgrpBootstrap.id())
-    method("migrateBootstrap() — idempotently emits any missing bootstrap entities when loading an older stream file", cgrpBootstrap.id())
+    method("emitBootstrap() — emits Relationship ops for bootstrap IDs 1–15 into a brand-new stream; the final op is MARKS_META_OP which marks META_ROOT as isMeta=true", cgrpBootstrap.id())
+    method("migrateBootstrap() — idempotently emits any missing bootstrap entities when loading an older stream file; guards the MARKS_META_OP emission by checking META_ROOT.isMeta() (not byId.containsKey(15), since the op record is not added to byId)", cgrpBootstrap.id())
+    method("handleMarksMeta(rel) — marks the entity at participants[1] as isMeta=true by replacing its IntentImpl in byId with isMeta=true; calls trackEntityId(rel.id) but does NOT add the op record to byId", cgrpBootstrap.id())
     method("handleInstantiatesNameNode(rel) — updates nameNodeToPath, namesByPath, nameNodeByReferent maps from a NAME_TYPE instantiation", cgrpBootstrap.id())
     method("findOrCreateNameNode(path: String): Long — ensures the full '/a/b/c' path chain exists; creates missing nodes", cgrpBootstrap.id())
     method("getNamePath(entityId: Long): String? — returns the string path for an entity that has a name node", cgrpBootstrap.id())
@@ -172,11 +175,12 @@ fun main() {
     val cgrpMutation = clazz("Mutation methods", fVoluntasIntentService.id())
     note("All methods that emit new Relationship ops and update in-memory state", cgrpMutation.id())
     method("addIntent(text: String, parentId: Long): Intent — creates a STRING_INTENT_TYPE intent; emits INSTANTIATES op", cgrpMutation.id())
-    method("addIntentOfType(typeId: Long, text: String, parentId: Long): Intent — creates a typed intent; emits INSTANTIATES with given typeId", cgrpMutation.id())
+    method("addIntentOfType(typeId: Long, text: String, parentId: Long): Intent — creates a typed intent; emits INSTANTIATES with given typeId; isMeta is derived from the parent (true if parent.isMeta())", cgrpMutation.id())
     method("edit(id: Long, newText: String): CommandResult — emits SETS_FIELD for the text literal; updates byId", cgrpMutation.id())
     method("moveParent(id: Long, newParentId: Long): CommandResult — emits SETS_FIELD for parent; updates parent/child maps", cgrpMutation.id())
     method("deleteIntent(id: Long): CommandResult — soft-deletes: sets deleted=true field", cgrpMutation.id())
     method("emitRelationship(rel: Relationship) — appends to ops list and calls processRelationship()", cgrpMutation.id())
+    method("bootstrapRootUser() — idempotent: creates a 'root' user instance under META_ROOT (via the auth/user type) with token 'root'; no-ops if root user already exists", cgrpMutation.id())
 
     // Query
     val cgrpQuery = clazz("Query methods", fVoluntasIntentService.id())
@@ -187,6 +191,9 @@ fun main() {
     method("getInstancesOfType(typeId: Long): List<Long> — returns entity IDs of all instances of the given type", cgrpQuery.id())
     method("getFocalScope(id: Long): FocalScope — constructs FocalScope with focus, ancestry chain, and direct children", cgrpQuery.id())
     method("getCommandAnnotations(): List<Pair<String,Long>> — scans byId for '/interface/command' type instances; returns (keyword, macroEntityId) pairs", cgrpQuery.id())
+    method("findUserByCredentials(username: String, token: String): Long? — scans user instances for matching username+token field values; returns entity ID or null", cgrpQuery.id())
+    method("isAuthModuleLoaded(): Boolean — returns true if the auth module root entity exists in the stream (used to guard auth-specific operations)", cgrpQuery.id())
+    method("getEntityByPath(path: String): Long? — resolves a '/module/type' path through the name-path namespace; returns the referent entity ID or null", cgrpQuery.id())
 
     // Macro
     val cgrpMacro = clazz("Macro system methods", fVoluntasIntentService.id())
@@ -279,7 +286,7 @@ fun main() {
     method("buildModule(name: String, block: ModuleBuilder.() -> Unit): VoluntasIntentService — creates module root, runs block, returns service with module ops", fModuleDsl.id())
     val cModuleBuilder = clazz("ModuleBuilder", fModuleDsl.id())
     note("Top-level builder: receives module name, creates root type, provides command/type/mutationCommand/builtinCommands builder methods", cModuleBuilder.id())
-    method("command(keyword: String, block: TypeBuilder.() -> Unit) — creates a visible STRING subtype + macro + command annotation for CLI use", cModuleBuilder.id())
+    method("command(keyword: String, fixedParent: Long? = null, block: TypeBuilder.() -> Unit) — creates a visible STRING subtype + macro + command annotation for CLI use; if fixedParent is set, the macro op hard-codes that entity ID as the parent instead of accepting a parentId parameter (used by auth/user to always create users under META_ROOT)", cModuleBuilder.id())
     method("type(keyword: String, block: TypeBuilder.() -> Unit) — creates a visible type without a CLI command or macro", cModuleBuilder.id())
     method("mutationCommand(keyword: String, block: MutationBuilder.() -> Unit) — creates a macro that operates on the currently focused intent", cModuleBuilder.id())
     method("builtinCommand(keyword: String) — documents a builtin command (no macro; for reference only)", cModuleBuilder.id())
@@ -300,6 +307,14 @@ fun main() {
     note("Generates modules/software.pb: requirement (with token count fields), system, implementation, file, class, and method commands", fGenSoftware.id())
     method("main() — builds the software module via buildModule(\"software\") and writes modules/software.pb", fGenSoftware.id())
 
+    val fGenAuth = file("GenerateAuthModule.kt", sysModuleDsl.id())
+    note("Generates modules/auth.pb: user command (fixedParent=META_ROOT so users always land in the meta tree), provide-user-token and change-auth-token mutation commands, and created-by type", fGenAuth.id())
+    method("main() — builds the auth module via buildModule(\"auth\") and writes modules/auth.pb", fGenAuth.id())
+
+    val fGenAgents = file("GenerateAgentsModule.kt", sysModuleDsl.id())
+    note("Generates modules/agents.pb: prompt command for storing Claude prompt intents", fGenAgents.id())
+    method("main() — builds the agents module via buildModule(\"agents\") and writes modules/agents.pb", fGenAgents.id())
+
     val sysModuleLoader = sys("Module loader: merges a module stream into the main stream with ID remapping", reqModules.id())
     note("Loading remaps module entity IDs to avoid collision with main stream IDs; types and macros matched by name prevent duplication on reload", sysModuleLoader.id())
 
@@ -315,10 +330,27 @@ fun main() {
     note("Merges a VoluntasModule into the main stream: remaps literals, remaps entity IDs, matches existing types by name", fModuleLoader.id())
     val cModuleLoader = clazz("ModuleLoader", fModuleLoader.id())
     note("Takes a target VoluntasIntentService and merges all module ops into it, building ID mapping tables as it goes; returns a manifest of created vs. existing IDs", cModuleLoader.id())
-    method("loadModule(module: VoluntasModule): ModuleManifest — main entry point: builds mappings, replays ops into target, returns (newlyCreated, alreadyExisted) ID sets", cModuleLoader.id())
+    method("loadModule(module: VoluntasModule): ModuleManifest — main entry point: builds mappings, replays ops into target, returns (newlyCreated, alreadyExisted) ID sets; uses getAllEntities().values (not getAll()) to find the existing module root, since module roots are meta and excluded from getAll()", cModuleLoader.id())
     method("buildLiteralMapping(module) — maps each module literal to an equivalent in the main stream (creating new literals as needed)", cModuleLoader.id())
     method("matchOrCreateType(name, localId) — finds existing type by name path or creates it; records the mapping in entityMapping", cModuleLoader.id())
     method("remapId(localId: Long): Long — translates a module-local entity ID to the corresponding main-stream ID using entityMapping", cModuleLoader.id())
+
+    val reqE2eTest = req("Full server boot with all modules must be verified by end-to-end tests against the real .pb module files", sysModuleLoader.id())
+    val sysE2eTest = sys("Module bootstrap end-to-end tests", reqE2eTest.id())
+    val fE2eTest = file("e2e/ModuleBootstrapE2ETest.kt", sysE2eTest.id())
+    note("Loads all modules/ .pb files and bootstrapRootUser(); skips gracefully if modules/ dir is absent; mirrors real server startup so regressions in ModuleLoader, isMeta propagation, and auth bootstrap are caught", fE2eTest.id())
+    val cE2eTest = clazz("ModuleBootstrapE2ETest", fE2eTest.id())
+    method("auth module types are present after boot — asserts /auth/user, /auth/provide-user-token, /auth/created-by paths exist", cE2eTest.id())
+    method("root user exists after bootstrapRootUser — findUserByCredentials(\"root\",\"root\") is non-null", cE2eTest.id())
+    method("root user is meta — root user intent has isMeta()=true (lives under META_ROOT)", cE2eTest.id())
+    method("root user is a child of META_ROOT — root user ID appears in META_ROOT focal scope children", cE2eTest.id())
+    method("standard/agents/software module types present — checks canonical paths for all module types", cE2eTest.id())
+    method("expected commands registered — verifies all module-defined CLI keywords in getCommandAnnotations()", cE2eTest.id())
+    method("module roots are meta — agents/auth/software/standard roots exist in getAllEntities() with isMeta()=true", cE2eTest.id())
+    method("visible tree is only server root after boot — getAll() returns only root intent (id 0); all module infra is meta", cE2eTest.id())
+    method("loading modules a second time is idempotent — entity count unchanged after second load", cE2eTest.id())
+    method("bootstrapRootUser is idempotent — calling it three times still produces exactly one root user", cE2eTest.id())
+    method("service state survives write-reload cycle — writeToFile + fromFile preserves auth, commands, paths, and meta flags", cE2eTest.id())
 
     val reqModuleTest = req("Module loading must correctly remap IDs, match existing types by name, and detect field conflicts", sysModuleLoader.id())
     val sysModuleTest = sys("ModuleLoader unit tests", reqModuleTest.id())
@@ -410,6 +442,23 @@ fun main() {
     method("testSubmitOpRoundTrip() — submit CreateIntent op; verify via GetIntent", cGrpcTest.id())
     method("testModuleLoading() — load module; verify types visible via GetFocalScope", cGrpcTest.id())
     method("testGetCommandsAfterModuleLoad() — GetCommands returns module-defined keywords", cGrpcTest.id())
+
+    // =========================================================================
+    // REQUIREMENT: Auth system
+    // =========================================================================
+    val reqAuth = req("The server must authenticate API callers using token-based credentials before processing any intent operations", 0)
+    note("Auth module defines user and token types; AuthGate validates credentials on each gRPC call; bootstrapRootUser seeds the initial admin user", reqAuth.id())
+
+    val sysAuthGate = sys("gRPC auth gate and user credential validation", reqAuth.id())
+
+    val fAuthGate = file("AuthGate.kt", sysAuthGate.id())
+    note("Intercepts all gRPC calls; extracts the bearer token from metadata; calls findUserByCredentials; rejects unauthenticated requests with UNAUTHENTICATED status", fAuthGate.id())
+    val cAuthGate = clazz("AuthGate", fAuthGate.id())
+    note("ServerInterceptor implementation that reads token from call metadata, validates against auth module user instances, and either forwards or rejects each call", cAuthGate.id())
+    method("interceptCall(call, headers, next) — extracts 'authorization' header; validates token; calls next.startCall() on success or closes with Status.UNAUTHENTICATED on failure", cAuthGate.id())
+
+    note("Auth module types (auth.pb): user (fixedParent=META_ROOT — instances always meta), provide-user-token (mutation macro: sets token field), change-auth-token (mutation macro: updates token), created-by (type for provenance links)", sysAuthGate.id())
+    note("bootstrapRootUser() in VoluntasIntentService: idempotent — checks for existing root user before creating; uses addIntentOfType(userTypeId, \"root\", META_ROOT) then sets token=\"root\" via setFieldValue", sysAuthGate.id())
 
     // =========================================================================
     // REQUIREMENT: Web interface
@@ -634,10 +683,13 @@ fun main() {
 
     val fBuildGradle = file("build.gradle.kts", sysBuild.id())
     note("Kotlin JVM Gradle build: plugin versions, all dependencies (gRPC, Ktor, Lanterna, Gson), protobuf code generation config, and all runnable tasks", fBuildGradle.id())
-    method("runServer — starts VoluntasRuntime on port 50051 with web port 8080 and modules/ directory", fBuildGradle.id())
+    method("runServer — starts VoluntasRuntime on port 50051 with web port 8080 and modules/ directory; loads standard, software, auth, and agents modules at startup then calls bootstrapRootUser()", fBuildGradle.id())
     method("runClient — starts TerminalClient connecting to localhost:50051", fBuildGradle.id())
     method("runGenerateStandard — regenerates modules/standard.pb", fBuildGradle.id())
     method("runGenerateSoftware — regenerates modules/software.pb", fBuildGradle.id())
+    method("runGenerateAuth — regenerates modules/auth.pb", fBuildGradle.id())
+    method("runGenerateAgents — regenerates modules/agents.pb", fBuildGradle.id())
+    method("runGenerateAll — convenience task that depends on all four generate tasks; regenerates all module .pb files in one step", fBuildGradle.id())
     method("runGenerateVoluntasPlan — regenerates voluntas_plan.pb", fBuildGradle.id())
     method("printRuntimeClasspath — prints runtime classpath for use in shell scripts", fBuildGradle.id())
 
@@ -660,6 +712,9 @@ fun main() {
     note("grpcurl wrapper: marks an intent started, done, or failed by submitting SetFieldValue ops with timestamp fields", fIntentMarkSh.id())
     val fIntentSetTokensSh = file("tools/intent-set-tokens.sh", sysBuild.id())
     note("grpcurl wrapper: writes input_tokens and output_tokens INT64 fields on a requirement intent after a worker turn", fIntentSetTokensSh.id())
+
+    val fAddPromptSh = file("tools/add-prompt-intent.sh", sysBuild.id())
+    note("Claude Code UserPromptSubmit hook: called by Claude Code before each user prompt turn; creates a prompt intent under the active requirement using the agents/prompt type so each conversation turn is tracked in the intent tree", fAddPromptSh.id())
 
     val fClaudeMd = file("CLAUDE.md", sysBuild.id())
     note("Workflow instructions for the Claude Code agent: intent tree protocol, tree exploration procedure, requirement/system/implementation pattern, and token tracking steps", fClaudeMd.id())

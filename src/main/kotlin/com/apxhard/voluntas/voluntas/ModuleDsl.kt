@@ -78,7 +78,7 @@ class ModuleBuilder(
      *
      * Terminal usage after loading this module:  `note Some freeform text`
      */
-    fun command(keyword: String, meta: Boolean = false, block: TypeBuilder.() -> Unit = {}) {
+    fun command(keyword: String, fixedParent: Long? = null, block: TypeBuilder.() -> Unit = {}) {
         val builder = TypeBuilder()
         builder.block()
 
@@ -89,10 +89,6 @@ class ModuleBuilder(
             autoNameInstances = true
         )
 
-        if (meta) {
-            service.setFieldValue(typeId, "meta-instances", true)
-        }
-
         for ((name, type, required, description) in builder.fields) {
             service.addField(typeId, name, type, required, description)
         }
@@ -101,10 +97,11 @@ class ModuleBuilder(
             "$moduleName/add-$keyword",
             listOf("textLit", "parentId")
         )
+        val parentParticipant = fixedParent ?: service.paramRef("parentId")
         service.addMacroOp(
             macroId,
             VoluntasIds.INSTANTIATES,
-            listOf(typeId, service.paramRef("textLit"), service.paramRef("parentId"))
+            listOf(typeId, service.paramRef("textLit"), parentParticipant)
         )
 
         val commandTypeId = ensureMacroCommandType()

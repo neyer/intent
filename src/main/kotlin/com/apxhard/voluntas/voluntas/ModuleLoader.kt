@@ -47,7 +47,7 @@ class ModuleLoader(private val service: VoluntasIntentService) {
         }
 
         // 2. Match or create module root (entity 0 in module stream) — placed under META_ROOT
-        val existingRoot = service.getAll().find { it.text() == module.rootText }
+        val existingRoot = service.getAllEntities().values.find { it.text() == module.rootText }
         if (existingRoot != null) {
             entityIdMap[VoluntasIds.ROOT_INTENT] = existingRoot.id()
             alreadyExisted.add(existingRoot.id())
@@ -108,22 +108,9 @@ class ModuleLoader(private val service: VoluntasIntentService) {
             // Determine the relationship type
             val relType = if (participants.isNotEmpty()) participants[0] else continue
 
-            // Skip ops for already-matched entities, with an exception for type-config flags
-            // (meta-instances) that must reach the main stream to take effect.
+            // Skip ops for already-matched entities
             if (isOpForMatchedEntity(relType, moduleEntityId, participants, matchedModuleEntityIds, entityIdMap)) {
-                val isTypeConfigField = relType == VoluntasIds.SETS_FIELD &&
-                    participants.size >= 4 &&
-                    matchedModuleEntityIds.contains(participants[1])
-                if (!isTypeConfigField) continue
-
-                val fieldName = module.moduleService.literalStore.getString(participants[2])
-                if (fieldName != "meta-instances") continue
-
-                // Dedup: skip if the flag is already active in the main stream
-                val targetMainId = entityIdMap[participants[1]] ?: continue
-                if (service.isMetaVisibleType(targetMainId)) continue
-
-                // Fall through to emit the op below
+                continue
             }
 
             // For name node INSTANTIATES: match by path if it already exists in the main stream.

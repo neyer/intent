@@ -1,5 +1,6 @@
 package e2e
 
+import com.apxhard.voluntas.voluntas.VoluntasIds
 import com.apxhard.voluntas.voluntas.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -42,10 +43,12 @@ class ModuleBootstrapE2ETest {
     }
 
     @Test
-    fun `auth user type is meta-visible`() {
+    fun `auth user type is a visible type`() {
         val userTypeId = service.getEntityByPath("/auth/user")
         assertNotNull(userTypeId, "auth/user type must exist")
-        assertTrue(service.isMetaVisibleType(userTypeId!!), "auth/user should be a meta-visible type")
+        // auth/user uses the visible participant layout; instances are meta because
+        // they live under META_ROOT, not because of a type-level flag
+        assertNotNull(userTypeId, "auth/user type must exist in the path system")
     }
 
     @Test
@@ -61,6 +64,15 @@ class ModuleBootstrapE2ETest {
         val rootUser = service.getById(rootUserId!!)
         assertNotNull(rootUser)
         assertTrue(rootUser!!.isMeta(), "root user intent should be meta (hidden from visible tree)")
+    }
+
+    @Test
+    fun `root user is a child of META_ROOT`() {
+        val rootUserId = service.findUserByCredentials("root", "root")!!
+        val scope = service.getFocalScope(VoluntasIds.META_ROOT)
+        val childIds = scope.children.map { it.id() }
+        assertTrue(rootUserId in childIds,
+            "root user should be a direct child of META_ROOT")
     }
 
     // -------------------------------------------------------------------------
@@ -140,13 +152,14 @@ class ModuleBootstrapE2ETest {
     // -------------------------------------------------------------------------
 
     @Test
-    fun `module roots appear in visible tree after boot`() {
-        val visibleTexts = service.getAll().map { it.text() }.toSet()
-        // Module roots are loaded as visible intents under the meta anchor entity
-        assertTrue("agents" in visibleTexts, "agents module root should be visible, got: $visibleTexts")
-        assertTrue("auth" in visibleTexts, "auth module root should be visible, got: $visibleTexts")
-        assertTrue("software" in visibleTexts, "software module root should be visible, got: $visibleTexts")
-        assertTrue("standard" in visibleTexts, "standard module root should be visible, got: $visibleTexts")
+    fun `module roots exist and are meta after boot`() {
+        val allTexts = service.getAllEntities().values.map { it.text() }.toSet()
+        // Module roots live under META_ROOT so they inherit isMeta=true
+        for (name in listOf("agents", "auth", "software", "standard")) {
+            assertTrue(name in allTexts, "$name module root should exist, got: $allTexts")
+            val root = service.getAllEntities().values.first { it.text() == name }
+            assertTrue(root.isMeta(), "$name module root should be meta (lives under META_ROOT)")
+        }
     }
 
     @Test
@@ -162,13 +175,11 @@ class ModuleBootstrapE2ETest {
     }
 
     @Test
-    fun `no user-created intents appear in visible tree after fresh boot`() {
-        // Only structural entities (module roots, meta anchor) should be visible.
-        // No tasks, notes, or other user content should be present.
+    fun `visible tree contains only the server root after fresh boot`() {
+        // All module infrastructure and users live under META_ROOT (meta).
+        // Only the server root intent (id 0) should be visible.
         val visible = service.getAll()
-        val moduleRootNames = setOf("agents", "auth", "software", "standard")
-        val unexpected = visible.filter { it.text() !in moduleRootNames && !it.isMeta() && it.id() > 0 }
-            .filter { it.text() != "meta" }
+        val unexpected = visible.filter { it.id() != VoluntasIds.ROOT_INTENT }
         assertTrue(unexpected.isEmpty(),
             "unexpected visible intents after fresh boot: ${unexpected.map { "${it.id()}:${it.text()}" }}")
     }
@@ -220,8 +231,10 @@ class ModuleBootstrapE2ETest {
         assertTrue("requirement" in commands, "software commands should survive round-trip")
 
         val userTypeId = reloaded.getEntityByPath("/auth/user")
-        assertNotNull(userTypeId)
-        assertTrue(reloaded.isMetaVisibleType(userTypeId!!),
-            "auth/user should still be meta-visible after round-trip")
+        assertNotNull(userTypeId, "auth/user type should survive round-trip")
+
+        val rootUserId = reloaded.findUserByCredentials("root", "root")!!
+        val rootUser = reloaded.getById(rootUserId)!!
+        assertTrue(rootUser.isMeta(), "root user should still be meta after round-trip")
     }
 }

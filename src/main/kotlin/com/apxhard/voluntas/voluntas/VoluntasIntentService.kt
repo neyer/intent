@@ -94,9 +94,6 @@ class VoluntasIntentService private constructor(
     // Types whose instances are visible (non-meta) intents with text — starts with STRING_INTENT_TYPE
     // and grows as subtypes are declared via DEFINES_TYPE participants[2].
     private val visibleTypes = mutableSetOf(VoluntasIds.STRING_INTENT_TYPE)
-    // Types whose instances use the visible participant layout (textLit, parentId) but are isMeta=true.
-    // Populated when a type entity has meta-instances=true set via SETS_FIELD.
-    private val metaVisibleTypes = mutableSetOf<Long>()
     // All instances of each type, keyed by type entity ID.
     private val instancesByType = mutableMapOf<Long, MutableList<Long>>()
 
@@ -113,7 +110,7 @@ class VoluntasIntentService private constructor(
     // typeAutoNames: type entity IDs whose instances should be automatically named.
     private val typeAutoNames = mutableSetOf<Long>()
 
-    // --- Bootstrap ---
+    // ---  = nullBootstrap ---
 
     private fun emitBootstrap(rootIntent: String) {
         // 1. Entity 7 = "string intent" type
@@ -180,6 +177,13 @@ class VoluntasIntentService private constructor(
             .addParticipants(VoluntasIds.NAMES_ROOT)
             .addParticipants(VoluntasIds.META_ROOT)
             .build())
+
+        // 8. Mark META_ROOT itself as meta — all its descendants inherit isMeta=true.
+        emitRelationship(Relationship.newBuilder()
+            .setId(VoluntasIds.MARKS_META_OP)
+            .addParticipants(VoluntasIds.MARKS_META)
+            .addParticipants(VoluntasIds.META_ROOT)
+            .build())
     }
 
     /**
@@ -232,6 +236,15 @@ class VoluntasIntentService private constructor(
                 .addParticipants(VoluntasIds.META_ROOT)
                 .build())
         }
+
+        // Op 15 = mark META_ROOT as meta
+        if (!(byId[VoluntasIds.META_ROOT]?.isMeta() ?: false)) {
+            emitRelationship(Relationship.newBuilder()
+                .setId(VoluntasIds.MARKS_META_OP)
+                .addParticipants(VoluntasIds.MARKS_META)
+                .addParticipants(VoluntasIds.META_ROOT)
+                .build())
+        }
     }
 
     // --- Emit & interpret ---
@@ -275,6 +288,7 @@ class VoluntasIntentService private constructor(
             VoluntasIds.DEFINES_MACRO     -> handleDefinesMacro(rel)
             VoluntasIds.DEFINES_MACRO_OP  -> handleDefinesMacroOp(rel)
             VoluntasIds.INVOKES_MACRO     -> handleInvokesMacro(rel, timestamp)
+            VoluntasIds.MARKS_META        -> handleMarksMeta(rel)
         }
     }
 
@@ -425,9 +439,9 @@ class VoluntasIntentService private constructor(
             return
         }
 
-        if (typeId in visibleTypes || typeId in metaVisibleTypes) {
-            // Visible (or meta-visible) type: text from participants[2], parent from participants[3].
-            // meta-visible types use the same layout but produce isMeta=true intents.
+        if (typeId in visibleTypes) {
+            // Visible type: text from participants[2], parent from participants[3].
+            // isMeta is inherited from the parent — intents under META_ROOT are meta.
             val textLitId = if (participants.size >= 3) participants[2] else null
             val parentEntityId = if (participants.size >= 4) participants[3] else null
             val text = if (textLitId != null) literalStore.getString(textLitId) ?: "" else ""
@@ -440,7 +454,7 @@ class VoluntasIntentService private constructor(
                 participantIds = if (parentEntityId != null) mutableListOf(parentEntityId) else mutableListOf(),
                 stateProvider = this,
                 createdTimestamp = timestamp,
-                isMeta = typeId in metaVisibleTypes,
+                isMeta = parentEntityId != null && (byId[parentEntityId]?.isMeta() ?: false),
                 typeName = visibleTypeName
             )
             byId[entityId] = intent
@@ -476,6 +490,26 @@ class VoluntasIntentService private constructor(
                 findOrCreateNameNode("$typePath/$entityId", entityId)
             }
         }
+    }
+
+    private fun handleMarksMeta(rel: Relationship) {
+        val participants = rel.participantsList
+        if (participants.size < 2) return
+        val targetId = participants[1]
+        val existing = byId[targetId] ?: return
+        byId[targetId] = IntentImpl(
+            text = existing.text(),
+            id = existing.id(),
+            participantIds = existing.participantIds().toMutableList(),
+            stateProvider = this,
+            createdTimestamp = existing.createdTimestamp(),
+            lastUpdatedTimestamp = existing.lastUpdatedTimestamp(),
+            fields = existing.fields() as MutableMap<String, FieldDetails>,
+            values = existing.fieldValues() as MutableMap<String, Any>,
+            isMeta = true,
+            typeName = existing.typeName()
+        )
+        trackEntityId(rel.id.toLong())
     }
 
     private fun handleSetsField(rel: Relationship, timestamp: Long?) {
@@ -535,7 +569,7 @@ class VoluntasIntentService private constructor(
                     lastUpdatedTimestamp = timestamp,
                     fields = existing.fields().toMutableMap(),
                     values = existing.fieldValues().toMutableMap(),
-                    isMeta = existing.isMeta(),
+                    isMeta = byId[newParentId]?.isMeta() ?: false,
                     typeName = existing.typeName()
                 )
                 byId[targetId] = updated
@@ -552,12 +586,7 @@ class VoluntasIntentService private constructor(
                         lit.hasBytesVal()  -> lit.bytesVal.toByteArray()
                         else -> return
                     }
-                    if (fieldName == "meta-instances" && value == true) {
-                        // Internal flag — instances of this type are isMeta=true but use the
-                        // visible participant layout (textLit at [2], parent at [3]).
-                        visibleTypes.remove(targetId)
-                        metaVisibleTypes.add(targetId)
-                    } else if (fieldName == "auto-name-instances" && value == true) {
+                    if (fieldName == "auto-name-instances" && value == true) {
                         // Internal flag — populate typeAutoNames; don't expose as a user field.
                         typeAutoNames.add(targetId)
                     } else {
@@ -1194,7 +1223,7 @@ class VoluntasIntentService private constructor(
         val userTypeId = getEntityByPath("/auth/user") ?: return
         val alreadyExists = getInstancesOfType(userTypeId).any { id -> byId[id]?.text() == "root" }
         if (!alreadyExists) {
-            val rootUser = addIntentOfType(userTypeId, "root")
+            val rootUser = addIntentOfType(userTypeId, "root", VoluntasIds.META_ROOT)
             setFieldValue(rootUser.id(), "auth-token", "root")
             println("Bootstrapped root user (auth-token: 'root')")
         }
@@ -1339,7 +1368,6 @@ class VoluntasIntentService private constructor(
         macros.clear()
         visibleTypes.clear()
         visibleTypes.add(VoluntasIds.STRING_INTENT_TYPE)
-        metaVisibleTypes.clear()
         instancesByType.clear()
         nameNodeToPath.clear()
         nameNodeToPath[VoluntasIds.NAMES_ROOT] = ""
@@ -1351,8 +1379,6 @@ class VoluntasIntentService private constructor(
         replayStream(stream)
         migrateBootstrap()
     }
-
-    fun isMetaVisibleType(typeId: Long): Boolean = typeId in metaVisibleTypes
 
     // --- IntentStreamConsumer implementation ---
 

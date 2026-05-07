@@ -1,10 +1,5 @@
 === Voluntas — event-sourced relationship-graph intent runtime ===
 
-12. meta
-  1000. software
-  1065. standard
-  2405. auth
-  2465. agents
 2078. represent intents
   1093. Represent any intent as a node in a typed, persistent relationship graph
     1095. Foundation: every entity the system manages is an Intent with id, text, parent/children, optional typed fields, and timestamps
@@ -691,3 +686,9 @@
       2324. confirm the new featur eworks
       2325. create release candidate and push to dev
       2326. create pc lite
+  2529. Fix: moveParent should update isMeta based on new parent's meta status
+      started: 1778164956842395400
+      input_tokens: 5000
+      output_tokens: 500
+      completed: 1778165098830711000
+      done: true

@@ -18,6 +18,12 @@ object VoluntasIds {
     const val DEFINES_MACRO_OP: Long  = 9L
     const val INVOKES_MACRO: Long     = 10L
 
+    /** Relationship type: marks the target entity as meta (isMeta=true). */
+    const val MARKS_META: Long        = 8L
+
+    /** Entity ID for the bootstrap op that marks META_ROOT as meta. */
+    const val MARKS_META_OP: Long     = 15L
+
     /** The "string intent" type entity, auto-bootstrapped. */
     const val STRING_INTENT_TYPE: Long = 7L
 
