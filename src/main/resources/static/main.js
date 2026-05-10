@@ -136,19 +136,105 @@ function renderTree(msg) {
     }
 }
 
+// --- Autocomplete ---
+
+let allCommands = [];
+let activeIndex = -1;
+
+function updateDropdown(value) {
+    const dropdown = document.getElementById("autocomplete-dropdown");
+    if (value === "" || value.includes(" ")) {
+        dropdown.style.display = "none";
+        return;
+    }
+    const matches = allCommands.filter(function (cmd) { return cmd.startsWith(value); });
+    if (matches.length === 0) {
+        dropdown.style.display = "none";
+        return;
+    }
+    dropdown.innerHTML = "";
+    activeIndex = -1;
+    matches.forEach(function (cmd) {
+        const item = document.createElement("div");
+        item.className = "autocomplete-item";
+        item.textContent = cmd;
+        item.addEventListener("mousedown", function (e) {
+            e.preventDefault();
+            selectSuggestion(cmd);
+        });
+        dropdown.appendChild(item);
+    });
+    dropdown.style.display = "block";
+}
+
+function highlightItem(index) {
+    const items = document.querySelectorAll(".autocomplete-item");
+    items.forEach(function (item, i) { item.classList.toggle("active", i === index); });
+    activeIndex = index;
+}
+
+function selectSuggestion(cmd) {
+    const input = document.getElementById("command-input");
+    input.value = cmd + " ";
+    document.getElementById("autocomplete-dropdown").style.display = "none";
+    activeIndex = -1;
+    input.focus();
+}
+
 // --- Keyboard handling ---
 
 document.addEventListener("DOMContentLoaded", function () {
     const input = document.getElementById("command-input");
+    const dropdown = document.getElementById("autocomplete-dropdown");
 
     input.addEventListener("keydown", function (e) {
+        const items = dropdown.querySelectorAll(".autocomplete-item");
+        const open = dropdown.style.display === "block" && items.length > 0;
+
+        if (open) {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                highlightItem((activeIndex + 1) % items.length);
+                return;
+            }
+            if (e.key === "ArrowUp") {
+                e.preventDefault();
+                highlightItem((activeIndex - 1 + items.length) % items.length);
+                return;
+            }
+            if (e.key === "Escape") {
+                dropdown.style.display = "none";
+                activeIndex = -1;
+                return;
+            }
+            if ((e.key === "Tab") && activeIndex >= 0) {
+                e.preventDefault();
+                selectSuggestion(items[activeIndex].textContent);
+                return;
+            }
+            if (e.key === "Enter" && activeIndex >= 0) {
+                e.preventDefault();
+                selectSuggestion(items[activeIndex].textContent);
+                return;
+            }
+        }
+
         if (e.key === "Enter") {
             const command = input.value.trim();
             if (command) {
+                dropdown.style.display = "none";
                 submitCommand(command);
                 input.value = "";
             }
         }
+    });
+
+    input.addEventListener("input", function () {
+        updateDropdown(input.value);
+    });
+
+    input.addEventListener("blur", function () {
+        setTimeout(function () { dropdown.style.display = "none"; }, 150);
     });
 
     // Keep focus on input
@@ -156,16 +242,10 @@ document.addEventListener("DOMContentLoaded", function () {
         input.focus();
     });
 
-    // Populate command autocomplete
     fetch("/api/commands")
         .then(function (r) { return r.json(); })
         .then(function (data) {
-            const list = document.getElementById("command-list");
-            (data.commands || []).forEach(function (kw) {
-                const opt = document.createElement("option");
-                opt.value = kw;
-                list.appendChild(opt);
-            });
+            allCommands = (data.commands || []).slice().sort();
         });
 
     connect();
