@@ -156,5 +156,17 @@ document.addEventListener("DOMContentLoaded", function () {
         input.focus();
     });
 
+    // Populate command autocomplete
+    fetch("/api/commands")
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            const list = document.getElementById("command-list");
+            (data.commands || []).forEach(function (kw) {
+                const opt = document.createElement("option");
+                opt.value = kw;
+                list.appendChild(opt);
+            });
+        });
+
     connect();
 });

@@ -155,7 +155,18 @@ class ModuleLoader(private val service: VoluntasIntentService) {
                                 (text == null || intent.text() == text)
                         }
                     } else {
-                        service.getInstanceOfTypeWithParent(mappedTypeId, mappedParentId)
+                        // Match by parent + field values so that multiple instances of the same
+                        // type under the same parent (e.g. builtin-command annotations) are each
+                        // matched to the correct pre-existing entity rather than all collapsing
+                        // to the first one found.
+                        val moduleFields = module.moduleService.getById(moduleEntityId)?.fieldValues()
+                            ?: emptyMap()
+                        service.getInstancesOfType(mappedTypeId).find { id ->
+                            val intent = service.getById(id) ?: return@find false
+                            if (intent.participantIds().firstOrNull() != mappedParentId) return@find false
+                            moduleFields.isEmpty() ||
+                                moduleFields.all { (name, value) -> intent.fieldValues()[name] == value }
+                        }
                     }
                     if (existingInstance != null) {
                         entityIdMap[moduleEntityId] = existingInstance

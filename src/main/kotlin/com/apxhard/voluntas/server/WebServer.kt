@@ -30,7 +30,8 @@ class IntentWebServer(
     private val commandAnnotations: List<Pair<String, Long>> = emptyList(),
     private val authGate: AuthGate? = null,
     private val writeFileName: String? = null,
-    private val onMutation: suspend () -> Unit = {}
+    private val onMutation: suspend () -> Unit = {},
+    private val builtinKeywords: List<String> = emptyList()
 ) {
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
     private val sessionManager = SessionManager(consumer, stateProvider, commandAnnotations, authGate, writeFileName)
@@ -38,7 +39,8 @@ class IntentWebServer(
 
     fun start() {
         server = embeddedServer(Netty, port = port) {
-            configureWebApp(stateProvider, consumer, stateDispatcher, onMutation, sessionManager, gson, authGate)
+            configureWebApp(stateProvider, consumer, stateDispatcher, onMutation, sessionManager, gson, authGate,
+                commandAnnotations.map { it.first } + builtinKeywords)
         }.start(wait = false)
         println("Web server started on port $port")
     }
@@ -69,7 +71,8 @@ fun Application.configureWebApp(
     onMutation: suspend () -> Unit = {},
     sessionManager: SessionManager = SessionManager(consumer, stateProvider),
     gson: Gson = Gson(),
-    authGate: AuthGate? = null
+    authGate: AuthGate? = null,
+    commandKeywords: List<String> = emptyList()
 ) {
     install(ContentNegotiation) {
         gson()
@@ -93,6 +96,10 @@ fun Application.configureWebApp(
     routing {
         get("/health") {
             call.respond(mapOf("status" to "ok"))
+        }
+
+        get("/api/commands") {
+            call.respond(mapOf("commands" to commandKeywords))
         }
 
         // [1023] GET /api/intent/{id} - fetch single intent as JSON

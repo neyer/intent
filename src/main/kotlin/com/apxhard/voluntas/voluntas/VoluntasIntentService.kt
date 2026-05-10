@@ -1148,6 +1148,18 @@ class VoluntasIntentService private constructor(
         }
     }
 
+    fun getBuiltinCommandKeywords(): List<String> {
+        val builtinTypeIds = byId.entries
+            .filter { (_, intent) -> intent.isMeta() && intent.text().endsWith("/interface/builtin-command") }
+            .map { it.key }
+
+        return builtinTypeIds.flatMap { typeId ->
+            getInstancesOfType(typeId).mapNotNull { instanceId ->
+                (byId[instanceId] as? IntentImpl)?.fieldValues()?.get("command-name") as? String
+            }
+        }
+    }
+
     override fun getById(id: Long): Intent? = byId[id]
 
     override fun getFocalScope(id: Long): FocalScope {

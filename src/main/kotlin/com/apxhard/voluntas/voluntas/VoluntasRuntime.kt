@@ -49,9 +49,9 @@ class VoluntasRuntime(
 
         if (webPort != null) {
             println("Voluntas web server started on port $port")
-            val ws = IntentWebServer(webPort, service, service, stateDispatcher, service.getCommandAnnotations(), authGate, fileName) {
-                service.writeToFile(fileName)
-            }
+            val ws = IntentWebServer(webPort, service, service, stateDispatcher, service.getCommandAnnotations(), authGate, fileName,
+                onMutation = { service.writeToFile(fileName) },
+                builtinKeywords = service.getBuiltinCommandKeywords())
             ws.start()
             webServer = ws
             val broadcastCallback: suspend () -> Unit = { ws.broadcastAll() }
