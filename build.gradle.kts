@@ -130,6 +130,14 @@ tasks.register<JavaExec>("runGenerateAgents") {
     classpath = sourceSets["main"].runtimeClasspath
 }
 
+// Task to regenerate modules/scheduling.pb
+tasks.register<JavaExec>("runGenerateScheduling") {
+    group = "application"
+    description = "Regenerate modules/scheduling.pb"
+    mainClass.set("com.apxhard.voluntas.plans.GenerateSchedulingModuleKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
 // Task to generate voluntas_plan.pb
 tasks.register<JavaExec>("runGenerateVoluntasPlan") {
     group = "application"

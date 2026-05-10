@@ -155,7 +155,7 @@ class ModuleBootstrapE2ETest {
     fun `module roots exist and are meta after boot`() {
         val allTexts = service.getAllEntities().values.map { it.text() }.toSet()
         // Module roots live under META_ROOT so they inherit isMeta=true
-        for (name in listOf("agents", "auth", "software", "standard")) {
+        for (name in listOf("agents", "auth", "scheduling", "software", "standard")) {
             assertTrue(name in allTexts, "$name module root should exist, got: $allTexts")
             val root = service.getAllEntities().values.first { it.text() == name }
             assertTrue(root.isMeta(), "$name module root should be meta (lives under META_ROOT)")

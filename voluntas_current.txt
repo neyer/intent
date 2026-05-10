@@ -692,5 +692,11 @@
       output_tokens: 500
       completed: 1778165098830711000
       done: true
+  2551. Create scheduling module with when/today/this-week meta intents
+      started: 1778425717104785700
+      input_tokens: 8000
+      output_tokens: 800
+      completed: 1778425981036943000
+      done: true
 2545. test auth
     deleted: true

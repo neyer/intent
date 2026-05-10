@@ -135,14 +135,28 @@ class ModuleLoader(private val service: VoluntasIntentService) {
 
             // For non-name INSTANTIATES where both type and parent are already mapped,
             // look for an existing instance rather than creating a new one.
+            // Visible types (STRING_INTENT_TYPE subtypes) use layout [typeId, textLit, parentId];
+            // non-visible types use [typeId, parentId]. Detect by checking if participants[2] is a literal.
             if (relType == VoluntasIds.INSTANTIATES && participants.size >= 3 &&
                 participants[1] != VoluntasIds.NAME_TYPE) {
                 val mappedTypeId = entityIdMap[participants[1]]
                     ?: if (participants[1] < VoluntasIds.FIRST_USER_ENTITY) participants[1] else null
-                val mappedParentId = entityIdMap[participants[2]]
-                    ?: if (participants[2] < VoluntasIds.FIRST_USER_ENTITY) participants[2] else null
+                val isVisibleLayout = VoluntasIds.isLiteral(participants[2])
+                val parentIdx = if (isVisibleLayout && participants.size >= 4) 3 else 2
+                val parentPid = participants[parentIdx]
+                val mappedParentId = entityIdMap[parentPid]
+                    ?: if (parentPid < VoluntasIds.FIRST_USER_ENTITY) parentPid else null
                 if (mappedTypeId != null && mappedParentId != null) {
-                    val existingInstance = service.getInstanceOfTypeWithParent(mappedTypeId, mappedParentId)
+                    val existingInstance = if (isVisibleLayout) {
+                        val text = module.moduleService.literalStore.getString(participants[2])
+                        service.getInstancesOfType(mappedTypeId).find { id ->
+                            val intent = service.getById(id)
+                            intent?.participantIds()?.firstOrNull() == mappedParentId &&
+                                (text == null || intent.text() == text)
+                        }
+                    } else {
+                        service.getInstanceOfTypeWithParent(mappedTypeId, mappedParentId)
+                    }
                     if (existingInstance != null) {
                         entityIdMap[moduleEntityId] = existingInstance
                         alreadyExisted.add(existingInstance)
