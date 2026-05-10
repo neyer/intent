@@ -404,6 +404,35 @@ class AddParentCommand : Command("add-parent") {
     }
 }
 
+class RemoveParentCommand : Command("remove-parent") {
+    override fun process(
+        args: String,
+        consumer: IntentStreamConsumer,
+        stateProvider: IntentStateProvider,
+        focalIntent: Long
+    ): CommandResult {
+        val parts = args.split(" ")
+        if (parts.size != 2)
+            return CommandResult("remove-parent requires two ids: <intentId> <parentId>")
+        val intentId = parts[0].toLongOrNull()
+            ?: return CommandResult("Invalid intent id: ${parts[0]}")
+        val parentId = parts[1].toLongOrNull()
+            ?: return CommandResult("Invalid parent id: ${parts[1]}")
+        val request = SubmitOpRequest.newBuilder()
+            .setRemoveIntentParent(
+                voluntas.v1.RemoveIntentParent.newBuilder()
+                    .setIntentId(intentId)
+                    .setParentId(parentId)
+            )
+            .build()
+        return try {
+            consumer.consume(request)
+        } catch (e: IllegalArgumentException) {
+            CommandResult("Error: ${e.message}")
+        }
+    }
+}
+
 class WriteNoGarbageCommand(private val fileName: String?) : Command("write-no-garbage") {
     override fun process(
         args: String,
@@ -610,6 +639,7 @@ class CommandExecutor(
         UpCommand(),
         MoveCommand(),
         AddParentCommand(),
+        RemoveParentCommand(),
         DoCommand(),
         DeleteCommand(),
         WriteCommand(),

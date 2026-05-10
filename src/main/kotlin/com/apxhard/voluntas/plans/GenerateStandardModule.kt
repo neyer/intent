@@ -21,7 +21,7 @@ fun main() {
 
         // Builtin commands (hardcoded in CommandExecutor) documented in the intent tree
         builtinCommands(
-            "add", "add-parent", "focus", "up", "update", "move", "do", "write", "import",
+            "add", "add-parent", "remove-parent", "focus", "up", "update", "move", "do", "write", "import",
             "delete", "write-no-garbage"
         )
     }

@@ -239,6 +239,11 @@ message AddIntentParent {
   int64 parentId = 2;
 }
 
+message RemoveIntentParent {
+  int64 intentId = 1;
+  int64 parentId = 2;
+}
+
 message SubmitOpRequest {
   oneof payload {
     CreateIntent create_intent = 1;
@@ -249,6 +254,7 @@ message SubmitOpRequest {
     InvokeMacro invoke_macro = 6;
     WriteNoGarbage write_no_garbage = 7;
     AddIntentParent add_intent_parent = 8;
+    RemoveIntentParent remove_intent_parent = 9;
   }
   // Per-request credentials. Required when the auth module is loaded on the server.
   optional string username   = 10;

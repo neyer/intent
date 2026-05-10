@@ -40,4 +40,8 @@ class IntentImpl(
             participantIds.add(participantId)
         }
     }
+
+    internal fun removeParticipant(participantId: Long) {
+        participantIds.remove(participantId)
+    }
 }

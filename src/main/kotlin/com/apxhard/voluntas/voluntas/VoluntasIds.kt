@@ -24,6 +24,9 @@ object VoluntasIds {
     /** Entity ID for the bootstrap op that marks META_ROOT as meta. */
     const val MARKS_META_OP: Long     = 15L
 
+    /** Relationship type: removes a participant from an entity (inverse of ADDS_PARTICIPANT). */
+    const val REMOVES_PARTICIPANT: Long = 16L
+
     /** The "string intent" type entity, auto-bootstrapped. */
     const val STRING_INTENT_TYPE: Long = 7L
 

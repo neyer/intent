@@ -284,7 +284,8 @@ class VoluntasIntentService private constructor(
             VoluntasIds.DEFINES_FIELD     -> handleDefinesField(rel, timestamp)
             VoluntasIds.INSTANTIATES      -> handleInstantiates(rel, timestamp)
             VoluntasIds.SETS_FIELD        -> handleSetsField(rel, timestamp)
-            VoluntasIds.ADDS_PARTICIPANT  -> handleAddsParticipant(rel, timestamp)
+            VoluntasIds.ADDS_PARTICIPANT    -> handleAddsParticipant(rel, timestamp)
+            VoluntasIds.REMOVES_PARTICIPANT -> handleRemovesParticipant(rel, timestamp)
             VoluntasIds.DEFINES_MACRO     -> handleDefinesMacro(rel)
             VoluntasIds.DEFINES_MACRO_OP  -> handleDefinesMacroOp(rel)
             VoluntasIds.INVOKES_MACRO     -> handleInvokesMacro(rel, timestamp)
@@ -665,6 +666,35 @@ class VoluntasIntentService private constructor(
         trackEntityId(relId)
     }
 
+    /**
+     * Handle REMOVES_PARTICIPANT relationship.
+     * participants: [REMOVES_PARTICIPANT, targetEntityId, participantToRemoveId]
+     */
+    private fun handleRemovesParticipant(rel: Relationship, timestamp: Long?) {
+        val participants = rel.participantsList
+        if (participants.size < 3) return
+
+        val targetId = participants[1]
+        val participantToRemove = participants[2]
+        val existing = byId[targetId] as? IntentImpl ?: return
+
+        existing.removeParticipant(participantToRemove)
+        unlinkChild(participantToRemove, targetId)
+
+        val relId = rel.id.toLong()
+        if (!byId.containsKey(relId)) {
+            byId[relId] = IntentImpl(
+                text = "RemovesParticipant:$participantToRemove from $targetId",
+                id = relId,
+                participantIds = mutableListOf(targetId),
+                stateProvider = this,
+                createdTimestamp = timestamp,
+                isMeta = true
+            )
+        }
+        trackEntityId(relId)
+    }
+
     private fun handleDefinesMacro(rel: Relationship) {
         val id = rel.id.toLong()
         val participants = rel.participantsList
@@ -927,6 +957,35 @@ class VoluntasIntentService private constructor(
         }
 
         emitRelationship(builder.build())
+    }
+
+    fun removeParticipant(intentId: Long, participantId: Long) {
+        byId[intentId] ?: throw IllegalArgumentException("No intent with id $intentId")
+
+        val relId = nextEntityId++
+        emitRelationship(Relationship.newBuilder()
+            .setId(relId)
+            .addParticipants(VoluntasIds.REMOVES_PARTICIPANT)
+            .addParticipants(intentId)
+            .addParticipants(participantId)
+            .build())
+    }
+
+    /**
+     * Remove a secondary parent from an existing intent.
+     * Fails if the intent does not have the given parent, or if it would be left with no parents.
+     */
+    fun removeIntentParent(intentId: Long, parentId: Long) {
+        val existing = byId[intentId] as? IntentImpl
+            ?: throw IllegalArgumentException("No intent with id $intentId")
+        byId[parentId] ?: throw IllegalArgumentException("No intent with id $parentId")
+        if (parentId !in existing.participantIds) {
+            throw IllegalArgumentException("Intent $parentId is not a parent of $intentId")
+        }
+        if (existing.participantIds.size <= 1) {
+            throw IllegalArgumentException("Cannot remove the only parent of intent $intentId")
+        }
+        removeParticipant(intentId, parentId)
     }
 
     /**
@@ -1349,7 +1408,8 @@ class VoluntasIntentService private constructor(
                 when (parts[0].toLong()) {
                     VoluntasIds.SETS_FIELD,
                     VoluntasIds.DEFINES_FIELD,
-                    VoluntasIds.ADDS_PARTICIPANT -> if (target in excludedIds) return@filter false
+                    VoluntasIds.ADDS_PARTICIPANT,
+                    VoluntasIds.REMOVES_PARTICIPANT -> if (target in excludedIds) return@filter false
                 }
             }
             true
@@ -1452,6 +1512,11 @@ class VoluntasIntentService private constructor(
                 val op = request.addIntentParent
                 addIntentParent(op.intentId, op.parentId)
                 CommandResult("added parent ${op.parentId} to intent ${op.intentId}")
+            }
+            SubmitOpRequest.PayloadCase.REMOVE_INTENT_PARENT -> {
+                val op = request.removeIntentParent
+                removeIntentParent(op.intentId, op.parentId)
+                CommandResult("removed parent ${op.parentId} from intent ${op.intentId}")
             }
             SubmitOpRequest.PayloadCase.PAYLOAD_NOT_SET, null ->
                 throw IllegalArgumentException("Request has no payload")
