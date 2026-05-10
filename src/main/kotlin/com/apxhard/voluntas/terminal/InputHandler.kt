@@ -382,17 +382,12 @@ class AddParentCommand : Command("add-parent") {
         stateProvider: IntentStateProvider,
         focalIntent: Long
     ): CommandResult {
-        val parts = args.split(" ")
-        if (parts.size != 2)
-            return CommandResult("add-parent requires two ids: <intentId> <parentId>")
-        val intentId = parts[0].toLongOrNull()
-            ?: return CommandResult("Invalid intent id: ${parts[0]}")
-        val parentId = parts[1].toLongOrNull()
-            ?: return CommandResult("Invalid parent id: ${parts[1]}")
+        val parentId = args.trim().toLongOrNull()
+            ?: return CommandResult("add-parent requires a parent id: <parentId>")
         val request = SubmitOpRequest.newBuilder()
             .setAddIntentParent(
                 AddIntentParent.newBuilder()
-                    .setIntentId(intentId)
+                    .setIntentId(focalIntent)
                     .setParentId(parentId)
             )
             .build()
@@ -411,17 +406,12 @@ class RemoveParentCommand : Command("remove-parent") {
         stateProvider: IntentStateProvider,
         focalIntent: Long
     ): CommandResult {
-        val parts = args.split(" ")
-        if (parts.size != 2)
-            return CommandResult("remove-parent requires two ids: <intentId> <parentId>")
-        val intentId = parts[0].toLongOrNull()
-            ?: return CommandResult("Invalid intent id: ${parts[0]}")
-        val parentId = parts[1].toLongOrNull()
-            ?: return CommandResult("Invalid parent id: ${parts[1]}")
+        val parentId = args.trim().toLongOrNull()
+            ?: return CommandResult("remove-parent requires a parent id: <parentId>")
         val request = SubmitOpRequest.newBuilder()
             .setRemoveIntentParent(
                 voluntas.v1.RemoveIntentParent.newBuilder()
-                    .setIntentId(intentId)
+                    .setIntentId(focalIntent)
                     .setParentId(parentId)
             )
             .build()
