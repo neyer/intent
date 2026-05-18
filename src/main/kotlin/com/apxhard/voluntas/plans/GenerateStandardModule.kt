@@ -20,10 +20,13 @@ fun main() {
         }
 
         // Builtin commands (hardcoded in CommandExecutor) documented in the intent tree
-        builtinCommands(
-            "add", "add-parent", "remove-parent", "focus", "up", "update", "move", "do", "write", "import",
-            "delete", "write-no-garbage"
-        )
+        builtinCommand("add", "text,id")
+        builtinCommand("focus", "id")
+        builtinCommand("move", "id")
+        builtinCommand("do", "id")
+        builtinCommand("add-parent", "id")
+        builtinCommand("remove-parent", "id")
+        builtinCommands("up", "update", "write", "import", "delete", "write-no-garbage")
     }
 
     File("modules").mkdirs()

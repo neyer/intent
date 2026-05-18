@@ -63,8 +63,8 @@ class ModuleLoader(private val service: VoluntasIntentService) {
         for ((moduleTypeId, typeDef) in module.typeEntities) {
             val existingType = allMainEntities.values.find { it.text() == typeDef.name }
             if (existingType != null) {
-                // Verify fields are identical
-                verifyFieldsMatch(typeDef.name, typeDef.fields, existingType.fields())
+                // Merge: add new fields from module to main, throw only on conflicting definitions
+                mergeFields(typeDef.name, existingType.id(), typeDef.fields, existingType.fields())
                 entityIdMap[moduleTypeId] = existingType.id()
                 alreadyExisted.add(existingType.id())
                 matchedModuleEntityIds.add(moduleTypeId)
@@ -165,10 +165,22 @@ class ModuleLoader(private val service: VoluntasIntentService) {
                             val intent = service.getById(id) ?: return@find false
                             if (intent.participantIds().firstOrNull() != mappedParentId) return@find false
                             moduleFields.isEmpty() ||
-                                moduleFields.all { (name, value) -> intent.fieldValues()[name] == value }
+                                moduleFields.all { (name, value) ->
+                                    val mainVal = intent.fieldValues()[name]
+                                    // null means the field was just migrated onto the type; treat as match
+                                    mainVal == null || mainVal == value
+                                }
                         }
                     }
                     if (existingInstance != null) {
+                        // Migrate any field values the module has but the existing instance lacks
+                        val moduleFieldVals = module.moduleService.getById(moduleEntityId)?.fieldValues() ?: emptyMap()
+                        val existingFieldVals = service.getById(existingInstance)?.fieldValues() ?: emptyMap()
+                        for ((name, value) in moduleFieldVals) {
+                            if (!existingFieldVals.containsKey(name)) {
+                                service.setFieldValue(existingInstance, name, value)
+                            }
+                        }
                         entityIdMap[moduleEntityId] = existingInstance
                         alreadyExisted.add(existingInstance)
                         matchedModuleEntityIds.add(moduleEntityId)
@@ -268,17 +280,19 @@ class ModuleLoader(private val service: VoluntasIntentService) {
         return builder.build()
     }
 
-    private fun verifyFieldsMatch(
+    private fun mergeFields(
         typeName: String,
+        mainTypeId: Long,
         moduleFields: Map<String, FieldDetails>,
         mainFields: Map<String, FieldDetails>
     ) {
         for ((fieldName, moduleDetail) in moduleFields) {
             val mainDetail = mainFields[fieldName]
-                ?: throw ModuleConflictException(
-                    "Type '$typeName': module defines field '$fieldName' but it does not exist in main stream"
-                )
-            if (moduleDetail != mainDetail) {
+            if (mainDetail == null) {
+                // Field is new — add it to the existing type in the main stream
+                service.addField(mainTypeId, fieldName, moduleDetail.fieldType,
+                    moduleDetail.required, moduleDetail.description)
+            } else if (moduleDetail != mainDetail) {
                 throw ModuleConflictException(
                     "Type '$typeName': field '$fieldName' differs. " +
                     "Module: $moduleDetail, Main: $mainDetail"

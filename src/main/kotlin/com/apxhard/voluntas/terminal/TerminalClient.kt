@@ -216,6 +216,8 @@ class IntentGrpcClient(
         return response.commandsList
     }
 
+    override fun searchIntents(query: String, limit: Int): List<Intent> = emptyList()
+
     override fun getFocalScope(id: Long): FocalScope {
         val request = GetFocalScopeRequest.newBuilder().setId(id).build()
         val response = stub.getFocalScope(request)

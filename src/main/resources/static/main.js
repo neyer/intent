@@ -139,32 +139,30 @@ function renderTree(msg) {
 // --- Autocomplete ---
 
 let allCommands = [];
+let commandArgTypes = {};
 let activeIndex = -1;
+let pendingSearchId = 0;
 
-function updateDropdown(value) {
+function hideDropdown() {
+    document.getElementById("autocomplete-dropdown").style.display = "none";
+    activeIndex = -1;
+}
+
+function showDropdownItems(items) {
     const dropdown = document.getElementById("autocomplete-dropdown");
-    if (value === "" || value.includes(" ")) {
-        dropdown.style.display = "none";
-        return;
-    }
-    const matches = allCommands.filter(function (cmd) { return cmd.startsWith(value); });
-    if (matches.length === 0) {
-        dropdown.style.display = "none";
-        return;
-    }
     dropdown.innerHTML = "";
     activeIndex = -1;
-    matches.forEach(function (cmd) {
-        const item = document.createElement("div");
-        item.className = "autocomplete-item";
-        item.textContent = cmd;
-        item.addEventListener("mousedown", function (e) {
+    items.forEach(function (item) {
+        const el = document.createElement("div");
+        el.className = "autocomplete-item";
+        el.textContent = item.label;
+        el.addEventListener("mousedown", function (e) {
             e.preventDefault();
-            selectSuggestion(cmd);
+            item.onSelect();
         });
-        dropdown.appendChild(item);
+        dropdown.appendChild(el);
     });
-    dropdown.style.display = "block";
+    dropdown.style.display = items.length > 0 ? "block" : "none";
 }
 
 function highlightItem(index) {
@@ -173,12 +171,60 @@ function highlightItem(index) {
     activeIndex = index;
 }
 
-function selectSuggestion(cmd) {
-    const input = document.getElementById("command-input");
-    input.value = cmd + " ";
-    document.getElementById("autocomplete-dropdown").style.display = "none";
-    activeIndex = -1;
-    input.focus();
+function updateDropdown(value) {
+    const spaceIdx = value.indexOf(" ");
+
+    // No space yet — suggest command keywords
+    if (spaceIdx === -1) {
+        if (value === "") { hideDropdown(); return; }
+        const matches = allCommands.filter(function (cmd) { return cmd.startsWith(value); });
+        showDropdownItems(matches.map(function (cmd) {
+            return {
+                label: cmd,
+                onSelect: function () {
+                    document.getElementById("command-input").value = cmd + " ";
+                    hideDropdown();
+                    document.getElementById("command-input").focus();
+                }
+            };
+        }));
+        return;
+    }
+
+    // Has space — check if we're in an id-type arg position
+    const keyword = value.slice(0, spaceIdx);
+    const argTypes = commandArgTypes[keyword];
+    if (!argTypes || argTypes.length === 0) { hideDropdown(); return; }
+
+    const parts = value.split(" ");
+    const argIndex = parts.length - 2; // 0-based index into args (parts[0] is keyword)
+    const typeIndex = Math.min(argIndex, argTypes.length - 1);
+    if (argTypes[typeIndex] !== "id") { hideDropdown(); return; }
+
+    const token = parts[parts.length - 1];
+    if (token === "") { hideDropdown(); return; }
+
+    // Search intents whose text contains the token
+    const searchId = ++pendingSearchId;
+    fetch("/api/search?q=" + encodeURIComponent(token))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (pendingSearchId !== searchId) return; // stale
+            const results = data.results || [];
+            showDropdownItems(results.map(function (r) {
+                return {
+                    label: r.id + " — " + r.text,
+                    onSelect: function () {
+                        const input = document.getElementById("command-input");
+                        const p = input.value.split(" ");
+                        p[p.length - 1] = String(r.id);
+                        input.value = p.join(" ") + " ";
+                        hideDropdown();
+                        input.focus();
+                    }
+                };
+            }));
+        });
 }
 
 // --- Keyboard handling ---
@@ -203,18 +249,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 return;
             }
             if (e.key === "Escape") {
-                dropdown.style.display = "none";
-                activeIndex = -1;
+                hideDropdown();
                 return;
             }
-            if ((e.key === "Tab") && activeIndex >= 0) {
+            if ((e.key === "Tab" || e.key === "Enter") && activeIndex >= 0) {
                 e.preventDefault();
-                selectSuggestion(items[activeIndex].textContent);
-                return;
-            }
-            if (e.key === "Enter" && activeIndex >= 0) {
-                e.preventDefault();
-                selectSuggestion(items[activeIndex].textContent);
+                items[activeIndex].dispatchEvent(new MouseEvent("mousedown"));
                 return;
             }
         }
@@ -222,7 +262,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (e.key === "Enter") {
             const command = input.value.trim();
             if (command) {
-                dropdown.style.display = "none";
+                hideDropdown();
                 submitCommand(command);
                 input.value = "";
             }
@@ -234,7 +274,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     input.addEventListener("blur", function () {
-        setTimeout(function () { dropdown.style.display = "none"; }, 150);
+        setTimeout(hideDropdown, 150);
     });
 
     // Keep focus on input
@@ -246,6 +286,10 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(function (r) { return r.json(); })
         .then(function (data) {
             allCommands = (data.commands || []).slice().sort();
+            commandArgTypes = data.argTypes || {};
+        })
+        .catch(function (err) {
+            document.getElementById("result-text").textContent = "Failed to load commands: " + err;
         });
 
     connect();

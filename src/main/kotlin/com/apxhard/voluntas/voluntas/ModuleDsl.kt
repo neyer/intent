@@ -78,7 +78,7 @@ class ModuleBuilder(
      *
      * Terminal usage after loading this module:  `note Some freeform text`
      */
-    fun command(keyword: String, fixedParent: Long? = null, block: TypeBuilder.() -> Unit = {}) {
+    fun command(keyword: String, fixedParent: Long? = null, argTypes: String = "text,id", block: TypeBuilder.() -> Unit = {}) {
         val builder = TypeBuilder()
         builder.block()
 
@@ -107,6 +107,7 @@ class ModuleBuilder(
         val commandTypeId = ensureMacroCommandType()
         val annotationId = service.instantiateType(commandTypeId, parentId = macroId)
         service.setFieldValue(annotationId, "command-name", keyword)
+        if (argTypes.isNotEmpty()) service.setFieldValue(annotationId, "arg-types", argTypes)
     }
 
     /**
@@ -148,7 +149,7 @@ class ModuleBuilder(
      *         setField("deleted", false)
      *     }
      */
-    fun mutationCommand(keyword: String, block: MutationBuilder.() -> Unit) {
+    fun mutationCommand(keyword: String, argTypes: String = "", block: MutationBuilder.() -> Unit) {
         val builder = MutationBuilder(service)
         builder.block()
 
@@ -160,6 +161,7 @@ class ModuleBuilder(
         val commandTypeId = ensureMacroCommandType()
         val annotationId = service.instantiateType(commandTypeId, parentId = macroId)
         service.setFieldValue(annotationId, "command-name", keyword)
+        if (argTypes.isNotEmpty()) service.setFieldValue(annotationId, "arg-types", argTypes)
     }
 
     /**
@@ -169,13 +171,14 @@ class ModuleBuilder(
      * This creates a "[moduleName]/interface/builtin-command" annotation so they are
      * discoverable alongside macro-backed commands.
      */
-    fun builtinCommand(keyword: String) {
+    fun builtinCommand(keyword: String, argTypes: String = "") {
         val typeId = ensureBuiltinCommandType()
         val annotationId = service.instantiateType(typeId, parentId = VoluntasIds.ROOT_INTENT)
         service.setFieldValue(annotationId, "command-name", keyword)
+        if (argTypes.isNotEmpty()) service.setFieldValue(annotationId, "arg-types", argTypes)
     }
 
-    /** Convenience: document multiple builtin commands at once. */
+    /** Convenience: document multiple builtin commands (no arg-type annotation) at once. */
     fun builtinCommands(vararg keywords: String) {
         for (keyword in keywords) builtinCommand(keyword)
     }
@@ -190,11 +193,10 @@ class ModuleBuilder(
             name = "$moduleName/interface/command",
             moduleEntityId = VoluntasIds.ROOT_INTENT
         )
-        service.addField(
-            id, "command-name", FieldType.FIELD_TYPE_STRING,
-            required = true,
-            description = "The CLI keyword that invokes the associated macro"
-        )
+        service.addField(id, "command-name", FieldType.FIELD_TYPE_STRING, required = true,
+            description = "The CLI keyword that invokes the associated macro")
+        service.addField(id, "arg-types", FieldType.FIELD_TYPE_STRING, required = false,
+            description = "Comma-separated argument types (text, id) for autocomplete")
         macroCommandTypeId = id
         id
     }
@@ -205,11 +207,10 @@ class ModuleBuilder(
             name = "$moduleName/interface/builtin-command",
             moduleEntityId = VoluntasIds.ROOT_INTENT
         )
-        service.addField(
-            id, "command-name", FieldType.FIELD_TYPE_STRING,
-            required = true,
-            description = "The CLI keyword of a hardcoded terminal command"
-        )
+        service.addField(id, "command-name", FieldType.FIELD_TYPE_STRING, required = true,
+            description = "The CLI keyword of a hardcoded terminal command")
+        service.addField(id, "arg-types", FieldType.FIELD_TYPE_STRING, required = false,
+            description = "Comma-separated argument types (text, id) for autocomplete")
         builtinCommandTypeId = id
         id
     }

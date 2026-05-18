@@ -31,7 +31,8 @@ class IntentWebServer(
     private val authGate: AuthGate? = null,
     private val writeFileName: String? = null,
     private val onMutation: suspend () -> Unit = {},
-    private val builtinKeywords: List<String> = emptyList()
+    private val builtinKeywords: List<String> = emptyList(),
+    private val commandArgTypes: Map<String, List<String>> = emptyMap()
 ) {
     private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
     private val sessionManager = SessionManager(consumer, stateProvider, commandAnnotations, authGate, writeFileName)
@@ -40,7 +41,7 @@ class IntentWebServer(
     fun start() {
         server = embeddedServer(Netty, port = port) {
             configureWebApp(stateProvider, consumer, stateDispatcher, onMutation, sessionManager, gson, authGate,
-                commandAnnotations.map { it.first } + builtinKeywords)
+                commandAnnotations.map { it.first } + builtinKeywords, commandArgTypes)
         }.start(wait = false)
         println("Web server started on port $port")
     }
@@ -72,7 +73,8 @@ fun Application.configureWebApp(
     sessionManager: SessionManager = SessionManager(consumer, stateProvider),
     gson: Gson = Gson(),
     authGate: AuthGate? = null,
-    commandKeywords: List<String> = emptyList()
+    commandKeywords: List<String> = emptyList(),
+    commandArgTypes: Map<String, List<String>> = emptyMap()
 ) {
     install(ContentNegotiation) {
         gson()
@@ -99,7 +101,22 @@ fun Application.configureWebApp(
         }
 
         get("/api/commands") {
-            call.respond(mapOf("commands" to commandKeywords))
+            call.respond(mapOf(
+                "commands" to commandKeywords,
+                "argTypes" to commandArgTypes
+            ))
+        }
+
+        get("/api/search") {
+            val query = call.request.queryParameters["q"] ?: ""
+            if (query.isBlank()) {
+                call.respond(mapOf("results" to emptyList<Any>()))
+                return@get
+            }
+            val results = withContext(stateDispatcher) {
+                stateProvider.searchIntents(query)
+            }
+            call.respond(mapOf("results" to results.map { mapOf("id" to it.id(), "text" to it.text()) }))
         }
 
         // [1023] GET /api/intent/{id} - fetch single intent as JSON

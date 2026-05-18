@@ -16,4 +16,9 @@ interface IntentStateProvider {
      * @throws NullPointerException if no intent exists for the id
      */
     fun getFocalScope(id: Long): FocalScope
+
+    /**
+     * Returns up to [limit] non-meta intents whose text contains [query] (case-insensitive).
+     */
+    fun searchIntents(query: String, limit: Int = 20): List<Intent>
 }

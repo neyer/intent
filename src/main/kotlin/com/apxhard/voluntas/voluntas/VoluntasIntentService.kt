@@ -1234,6 +1234,36 @@ class VoluntasIntentService private constructor(
         )
     }
 
+    override fun searchIntents(query: String, limit: Int): List<Intent> {
+        if (query.isEmpty()) return emptyList()
+        val lower = query.lowercase()
+        return byId.values
+            .filter { !it.isMeta() && it.text().lowercase().contains(lower) }
+            .sortedWith(compareBy({ it.text().length }, { it.id() }))
+            .take(limit)
+    }
+
+    fun getCommandArgTypes(): Map<String, List<String>> {
+        val result = mutableMapOf<String, List<String>>()
+
+        val commandTypeIds = byId.entries
+            .filter { (_, v) -> v.isMeta() && (v.text().endsWith("/interface/command") || v.text().endsWith("/interface/builtin-command")) }
+            .map { it.key }
+
+        for (typeId in commandTypeIds) {
+            for (instanceId in getInstancesOfType(typeId)) {
+                val instance = byId[instanceId] as? IntentImpl ?: continue
+                val name = instance.fieldValues()["command-name"] as? String ?: continue
+                val argTypesStr = instance.fieldValues()["arg-types"] as? String ?: continue
+                if (argTypesStr.isNotEmpty()) {
+                    result[name] = argTypesStr.split(",")
+                }
+            }
+        }
+
+        return result
+    }
+
     /**
      * Add a secondary parent to an existing intent without replacing the primary parent.
      * Reuses addParticipant() which appends to participantIds and calls linkChild().

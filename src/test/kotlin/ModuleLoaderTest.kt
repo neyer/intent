@@ -106,10 +106,9 @@ class ModuleLoaderTest {
 
     @Test
     fun `loading module into stream with conflicting type throws`(@TempDir tempDir: Path) {
-        // Manually create a "requirement" type with different fields
+        // Create "requirement" with "name" as BOOL — conflicts with the module's STRING
         val reqTypeId = mainService.defineType("requirement")
-        mainService.addField(reqTypeId, "title", FieldType.FIELD_TYPE_STRING, required = true)
-        // This has "title" instead of "name", so it should conflict
+        mainService.addField(reqTypeId, "name", FieldType.FIELD_TYPE_BOOL, required = false)
 
         val module = createSoftwareDevModule(tempDir)
         val loader = ModuleLoader(mainService)
@@ -118,6 +117,21 @@ class ModuleLoaderTest {
             loader.loadModule(module)
         }
         assertTrue(ex.message!!.contains("requirement"), "Exception should mention the type name")
+    }
+
+    @Test
+    fun `loading module migrates missing fields onto existing types`(@TempDir tempDir: Path) {
+        // Create "requirement" type with no fields yet
+        mainService.defineType("requirement")
+
+        val module = createSoftwareDevModule(tempDir)
+        val loader = ModuleLoader(mainService)
+        loader.loadModule(module)
+
+        // The module's fields should now exist on the matched type in the main stream
+        val req = mainService.getAllEntities().values.find { it.text() == "requirement" }!!
+        assertTrue(req.fields().containsKey("name"), "name should have been migrated")
+        assertTrue(req.fields().containsKey("description"), "description should have been migrated")
     }
 
     @Test
