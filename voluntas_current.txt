@@ -254,6 +254,8 @@
           2129. main.js: display typeName in renderIntentRow()
               completed: 1772559996110080674
               done: true
+        2718. store user token as cook
+            done: true
     2208. grpc
       1609. A gRPC server must expose the full intent tree to any remote client over the network
         1611. Uses grpc-kotlin-stub for coroutine-friendly server implementations; all state access is serialised through a single-thread Kotlin coroutine dispatcher

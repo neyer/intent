@@ -1,6 +1,31 @@
+// --- Credential persistence ---
+
+function loadCredentials() {
+    try { return JSON.parse(localStorage.getItem("intent_credentials")); } catch { return null; }
+}
+
+function saveCredentials(username, authToken) {
+    try { localStorage.setItem("intent_credentials", JSON.stringify({ username, authToken })); } catch {}
+}
+
+function clearCredentials() {
+    try { localStorage.removeItem("intent_credentials"); } catch {}
+}
+
 // --- WebSocket connection management ---
 
 let ws = null;
+let currentFocusText = "";
+let pendingAuthCapture = null; // { username, authToken } set when provide-user-token is in flight
+
+function isResultError(result) {
+    const lower = result.toLowerCase();
+    return lower.startsWith("not authenticated") ||
+           lower.startsWith("invalid credentials") ||
+           lower.startsWith("error") ||
+           lower.startsWith("usage:") ||
+           lower.startsWith("no intent");
+}
 
 function connect() {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -8,18 +33,39 @@ function connect() {
 
     ws.onopen = function () {
         document.getElementById("result-text").textContent = "Connected";
+        const creds = loadCredentials();
+        if (creds && creds.username && creds.authToken) {
+            ws.send(JSON.stringify({ type: "auth", username: creds.username, authToken: creds.authToken }));
+        }
     };
 
     ws.onmessage = function (event) {
         const msg = JSON.parse(event.data);
+        if (msg.type === "auth_result") {
+            const el = document.getElementById("result-text");
+            if (msg.success) {
+                el.textContent = "Authenticated as " + msg.username;
+                el.classList.remove("error");
+            } else {
+                el.textContent = msg.message || "Authentication failed";
+                el.classList.add("error");
+                clearCredentials();
+            }
+            return;
+        }
         if (msg.type === "scope") {
+            if (msg.focus) currentFocusText = msg.focus.text || "";
             if (msg.result !== undefined) {
                 const el = document.getElementById("result-text");
                 el.textContent = msg.result;
-                const isError = msg.result.toLowerCase().startsWith("not authenticated") ||
-                                msg.result.toLowerCase().startsWith("invalid credentials") ||
-                                msg.result.toLowerCase().startsWith("error");
+                const isError = isResultError(msg.result);
                 el.classList.toggle("error", isError);
+                if (pendingAuthCapture) {
+                    if (!isError && pendingAuthCapture.username) {
+                        saveCredentials(pendingAuthCapture.username, pendingAuthCapture.authToken);
+                    }
+                    pendingAuthCapture = null;
+                }
             }
             renderTree(msg);
         } else if (msg.type === "tree_update") {
@@ -43,6 +89,11 @@ function submitCommand(command) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         document.getElementById("result-text").textContent = "Not connected";
         return;
+    }
+    const trimmed = command.trim();
+    if (trimmed.startsWith("provide-user-token ")) {
+        const token = trimmed.slice("provide-user-token ".length).trim();
+        pendingAuthCapture = { username: currentFocusText, authToken: token };
     }
     ws.send(JSON.stringify({ command: command }));
 }

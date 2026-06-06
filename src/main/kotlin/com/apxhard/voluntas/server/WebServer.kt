@@ -198,6 +198,21 @@ fun Application.configureWebApp(
                     if (frame is Frame.Text) {
                         val text = frame.readText()
                         val msg = gson.fromJson(text, Map::class.java)
+
+                        if (msg["type"] as? String == "auth") {
+                            val username = msg["username"] as? String
+                            val authToken = msg["authToken"] as? String
+                            try {
+                                authGate?.validate(username, authToken)
+                                session.username = username
+                                session.authToken = authToken
+                                send(Frame.Text(gson.toJson(mapOf("type" to "auth_result", "success" to true, "username" to username))))
+                            } catch (e: Exception) {
+                                send(Frame.Text(gson.toJson(mapOf("type" to "auth_result", "success" to false, "message" to (e.message ?: "Authentication failed")))))
+                            }
+                            continue
+                        }
+
                         val command = msg["command"] as? String ?: continue
 
                         val (result, newFocalIntent) = try {
