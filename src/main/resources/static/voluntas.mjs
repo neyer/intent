@@ -213,6 +213,9 @@ export class VoluntasIntentService {
     this._nameNodeByReferent = new Map();
     this._referentByNameNode = new Map();
     this._typeAutoNames  = new Set();
+
+    // All emitted ops in serializable format (strings for BigInt IDs)
+    this._ops = [];
   }
 
   // ----------------------------------------------------------
@@ -228,14 +231,17 @@ export class VoluntasIntentService {
 
   /**
    * Replay a stream expressed as an array of op objects:
-   *   { type: 'literal',      id: BigInt, litType: string, value: any }
-   *   { type: 'relationship', id: BigInt, participants: BigInt[], timestamp: BigInt|null }
+   *   { type: 'literal',      id: BigInt|string, litType: string, value: any }
+   *   { type: 'relationship', id: BigInt|string, participants: (BigInt|string)[], timestamp: BigInt|string|null }
    */
-  static fromOps(ops) {
-    const svc = new VoluntasIntentService('intent-stream');
+  static fromOps(ops, streamId = 'intent-stream') {
+    const svc = new VoluntasIntentService(streamId);
     svc._replayOps(ops);
     return svc;
   }
+
+  /** Returns all emitted ops in a JSON-serializable format (IDs as strings). */
+  toOps() { return [...this._ops]; }
 
   // ----------------------------------------------------------
   // Public high-level API  (mirrors IntentService.kt)
@@ -317,6 +323,80 @@ export class VoluntasIntentService {
     if (intent._participantIds.length <= 1)
       throw new Error(`Cannot remove the only parent of intent ${intentId}`);
     this._removeParticipant(intentId, parentId);
+  }
+
+  /**
+   * Define a new intent type (mirrors VoluntasIntentService.kt#defineType).
+   * @param {string} name  Full path name, e.g. '/browser/current-user'
+   * @param {object} opts  { moduleEntityId?, parentTypeId?, autoNameInstances? }
+   * @returns {BigInt} the new type entity id
+   */
+  defineType(name, opts = {}) {
+    const { parentTypeId = null, autoNameInstances = false } = opts;
+    // A module context is required whenever a parentTypeId is set (mirrors Kotlin).
+    // Default to META_ROOT so callers don't have to create a module entity first.
+    let { moduleEntityId = null } = opts;
+    if (parentTypeId !== null && moduleEntityId === null) moduleEntityId = META_ROOT;
+    const id = this._nextEntityId++;
+    const participants = [DEFINES_TYPE];
+    if (moduleEntityId !== null) participants.push(BigInt(moduleEntityId));
+    if (parentTypeId  !== null) participants.push(BigInt(parentTypeId));
+    this._emitRelationship({ id, participants });
+    this.edit(id, name);
+    this._findOrCreateNameNode(name, id);
+    if (autoNameInstances) {
+      const relId = this._nextEntityId++;
+      const fnl   = this.literalStore.getOrCreate('auto-name-instances');
+      const vl    = this.literalStore.getOrCreate(true);
+      this._emitRelationship({ id: relId, participants: [SETS_FIELD, id, fnl, vl] });
+    }
+    return id;
+  }
+
+  /**
+   * Add a typed field definition to an entity (type, macro, etc.).
+   * @param {BigInt|number} entityId
+   * @param {string} fieldName
+   * @param {string} fieldType  e.g. 'STRING', 'BOOL', 'INT64', 'INTENT_REF'
+   * @param {boolean} required
+   * @param {string|null} description
+   */
+  addField(entityId, fieldName, fieldType, required = false, description = null) {
+    const bid = BigInt(entityId);
+    if (!this._byId.has(bid)) throw new Error(`No entity with id ${entityId}`);
+    const relId       = this._nextEntityId++;
+    const fieldNameLit = this.literalStore.getOrCreate(fieldName);
+    const fieldTypeLit = this.literalStore.getOrCreate(fieldType);
+    const parts = [DEFINES_FIELD, bid, fieldNameLit, fieldTypeLit];
+    if (required || description !== null) parts.push(this.literalStore.getOrCreate(required));
+    if (description !== null) parts.push(this.literalStore.getOrCreate(description));
+    this._emitRelationship({ id: relId, participants: parts });
+  }
+
+  /**
+   * Create an instance of a custom type.
+   * @param {BigInt|number} typeId
+   * @param {string} text  Initial text value
+   * @param {BigInt|number|null} parentId
+   * @returns {IntentImpl|null}
+   */
+  addIntentOfType(typeId, text, parentId = null) {
+    const id       = this._nextEntityId++;
+    const textLitId = this.literalStore.getOrCreate(text);
+    const parts    = [INSTANTIATES, BigInt(typeId), textLitId];
+    if (parentId !== null) parts.push(BigInt(parentId));
+    this._emitRelationship({ id, participants: parts });
+    return this._byId.get(id) ?? null;
+  }
+
+  /**
+   * Return all instances of the given type.
+   * @param {BigInt|number} typeId
+   * @returns {IntentImpl[]}
+   */
+  getInstancesOfType(typeId) {
+    const instances = this._instancesByType.get(BigInt(typeId)) ?? [];
+    return instances.map(id => this._byId.get(id)).filter(Boolean);
   }
 
   // ----------------------------------------------------------
@@ -431,10 +511,26 @@ export class VoluntasIntentService {
   // Emit & interpret
   // ----------------------------------------------------------
 
-  /** Emit a relationship (appends to ops list and interprets it). */
+  /** Emit a relationship: track in _ops (when not replaying) and interpret it. */
   _emitRelationship(rel) {
     const { id, participants, timestamp = null } = rel;
-    this._interpretRelationship(BigInt(id), participants.map(BigInt), timestamp);
+    const bId    = BigInt(id);
+    const bParts = participants.map(BigInt);
+    if (!this._isReplaying) {
+      for (const pid of bParts) {
+        if (isLiteral(pid)) {
+          const lit = this.literalStore.getById(pid);
+          if (lit) this._ops.push(this._litToOp(lit));
+        }
+      }
+      this._ops.push({ type: 'relationship', id: String(bId), participants: bParts.map(String) });
+    }
+    this._interpretRelationship(bId, bParts, timestamp);
+  }
+
+  _litToOp(lit) {
+    const value = lit.type === 'int64' ? String(lit.value) : lit.value;
+    return { type: 'literal', id: String(lit.id), litType: lit.type, value };
   }
 
   _interpretRelationship(id, participants, timestamp) {
@@ -950,6 +1046,7 @@ export class VoluntasIntentService {
     this._isReplaying = true;
     try {
       for (const op of ops) {
+        this._ops.push(op);
         if (op.type === 'literal') {
           this.literalStore.register({
             id: BigInt(op.id),

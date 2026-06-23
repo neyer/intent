@@ -12,7 +12,7 @@ import {
   META_ROOT,
   STRING_INTENT_TYPE,
   NAME_TYPE,
-} from './voluntas.mjs';
+} from '../src/main/resources/static/voluntas.mjs';
 
 // ============================================================
 // Bootstrap / initial state
@@ -334,5 +334,87 @@ describe('fromOps replay', () => {
       all1.sort((a, b) => a.text.localeCompare(b.text)),
       all2.sort((a, b) => a.text.localeCompare(b.text)),
     );
+  });
+
+  test('toOps() → fromOps() round-trip preserves full state', () => {
+    const svc = VoluntasIntentService.new('Root');
+    const a   = svc.addIntent('Alpha', 0);
+    const b   = svc.addIntent('Beta', Number(a.id()));
+    svc.setFieldValue(a.id(), 'status', 'done');
+    svc.edit(b.id(), 'Beta Renamed');
+
+    const ops      = svc.toOps();
+    const restored = VoluntasIntentService.fromOps(ops);
+
+    // Visible intents match
+    const get = s => s.getAll().map(i => ({ id: Number(i.id()), text: i.text(), fv: i.fieldValues() }))
+      .sort((x, y) => x.id - y.id);
+    assert.deepEqual(get(svc), get(restored));
+
+    // toOps on the restored copy equals original (same serializable state)
+    assert.deepEqual(restored.toOps(), ops);
+  });
+});
+
+// ============================================================
+// Module-building API  (defineType, addField, addIntentOfType, getInstancesOfType)
+// ============================================================
+
+describe('defineType / addField / addIntentOfType', () => {
+  test('defineType creates a visible subtype', () => {
+    const svc    = VoluntasIntentService.new('Root');
+    const typeId = svc.defineType('/test/note', { parentTypeId: STRING_INTENT_TYPE });
+    assert.ok(typeId > 0n, 'type id should be positive');
+    // getEntityByPath should find it
+    const found  = svc.getEntityByPath('/test/note');
+    assert.equal(found, typeId);
+  });
+
+  test('addIntentOfType under root creates visible intent', () => {
+    const svc    = VoluntasIntentService.new('Root');
+    const typeId = svc.defineType('/test/task', { parentTypeId: STRING_INTENT_TYPE });
+    const inst   = svc.addIntentOfType(typeId, 'My task', 0n);
+    assert.ok(inst, 'instance should be created');
+    assert.equal(inst.text(), 'My task');
+    assert.equal(inst.isMeta(), false);
+    assert.equal(inst.typeName(), 'task');
+  });
+
+  test('addIntentOfType under META_ROOT creates meta intent', () => {
+    const svc    = VoluntasIntentService.new('Root');
+    const typeId = svc.defineType('/browser/current-user', { parentTypeId: STRING_INTENT_TYPE });
+    svc.addField(typeId, 'auth-token', 'STRING');
+    const inst   = svc.addIntentOfType(typeId, 'alice', META_ROOT);
+    assert.ok(inst, 'instance should be created');
+    assert.equal(inst.isMeta(), true);
+    svc.setFieldValue(inst.id(), 'auth-token', 'secret123');
+    assert.equal(svc.getById(inst.id())?.fieldValues()['auth-token'], 'secret123');
+  });
+
+  test('getInstancesOfType returns created instances', () => {
+    const svc    = VoluntasIntentService.new('Root');
+    const typeId = svc.defineType('/test/item', { parentTypeId: STRING_INTENT_TYPE });
+    svc.addIntentOfType(typeId, 'Item A', 0n);
+    svc.addIntentOfType(typeId, 'Item B', 0n);
+    const instances = svc.getInstancesOfType(typeId);
+    assert.equal(instances.length, 2);
+    const texts = instances.map(i => i.text()).sort();
+    assert.deepEqual(texts, ['Item A', 'Item B']);
+  });
+
+  test('defineType + addField survives toOps/fromOps round-trip', () => {
+    const svc    = VoluntasIntentService.new('Root');
+    const typeId = svc.defineType('/app/note', { parentTypeId: STRING_INTENT_TYPE });
+    svc.addField(typeId, 'priority', 'STRING');
+    const inst   = svc.addIntentOfType(typeId, 'Take a note', 0n);
+    svc.setFieldValue(inst.id(), 'priority', 'high');
+
+    const restored   = VoluntasIntentService.fromOps(svc.toOps());
+    const resTypeId  = restored.getEntityByPath('/app/note');
+    assert.equal(resTypeId, typeId, 'type id should be stable across replay');
+    const resInst    = restored.getInstancesOfType(resTypeId);
+    assert.equal(resInst.length, 1);
+    assert.equal(resInst[0].text(), 'Take a note');
+    assert.equal(resInst[0].fieldValues()['priority'], 'high');
   });
 });

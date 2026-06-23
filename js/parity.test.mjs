@@ -16,7 +16,7 @@
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { VoluntasIntentService } from './voluntas.mjs';
+import { VoluntasIntentService } from '../src/main/resources/static/voluntas.mjs';
 
 // ── Configuration ─────────────────────────────────────────────
 

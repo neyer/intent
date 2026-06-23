@@ -1,16 +1,6 @@
-// --- Credential persistence ---
+import { BrowserStream } from './browser-stream.mjs';
 
-function loadCredentials() {
-    try { return JSON.parse(localStorage.getItem("intent_credentials")); } catch { return null; }
-}
-
-function saveCredentials(username, authToken) {
-    try { localStorage.setItem("intent_credentials", JSON.stringify({ username, authToken })); } catch {}
-}
-
-function clearCredentials() {
-    try { localStorage.removeItem("intent_credentials"); } catch {}
-}
+const browserStream = BrowserStream.load();
 
 // --- WebSocket connection management ---
 
@@ -33,8 +23,8 @@ function connect() {
 
     ws.onopen = function () {
         document.getElementById("result-text").textContent = "Connected";
-        const creds = loadCredentials();
-        if (creds && creds.username && creds.authToken) {
+        const creds = browserStream.getCurrentUser();
+        if (creds) {
             ws.send(JSON.stringify({ type: "auth", username: creds.username, authToken: creds.authToken }));
         }
     };
@@ -49,7 +39,7 @@ function connect() {
             } else {
                 el.textContent = msg.message || "Authentication failed";
                 el.classList.add("error");
-                clearCredentials();
+                browserStream.clearCurrentUser();
             }
             return;
         }
@@ -62,7 +52,7 @@ function connect() {
                 el.classList.toggle("error", isError);
                 if (pendingAuthCapture) {
                     if (!isError && pendingAuthCapture.username) {
-                        saveCredentials(pendingAuthCapture.username, pendingAuthCapture.authToken);
+                        browserStream.setCurrentUser(pendingAuthCapture.username, pendingAuthCapture.authToken);
                     }
                     pendingAuthCapture = null;
                 }
