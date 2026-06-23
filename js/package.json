@@ -1,0 +1,10 @@
+{
+  "name": "voluntas-js",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "JavaScript port of the Voluntas intent stream processor",
+  "scripts": {
+    "test": "node --test js/voluntas.test.mjs",
+    "test:parity": "node --test js/parity.test.mjs"
+  }
+}
