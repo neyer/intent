@@ -1,0 +1,224 @@
+# Context
+
+# Current Focus
+
+[0] Voluntas Server Root
+
+# Plan
+
+- [1189] test
+- [1190] ioquake3: open-source cross-platform multiplayer arena FPS — community port of Quake III Arena
+  - [1191] Engine core (qcommon): platform-independent services shared between client and server
+    - [1201] q_shared.h / q_shared.c / q_math.c — shared math, data types, and utility functions used across all modules
+    - [1202] q_platform.h — compile-time platform detection macros (endianness, pointer size, OS)
+    - [1203] common.c — bootstrap, main loop (Com_Frame), fatal error handling, hunk/zone allocators
+    - [1204] cvar.c — console variable (cvar) registry: registration, lookup, modification, and persistence
+    - [1205] cmd.c — command buffer and tokenizer: queues and dispatches console commands
+    - [1206] files.c — virtual file system: pk3/zip pack loading, asset search path, and file I/O
+    - [1207] net_ip.c — UDP socket layer: bind, send/receive datagrams, LAN broadcast, IPv4/IPv6 support
+    - [1208] net_chan.c — reliable-over-UDP channel: sequencing, fragmentation, out-of-order detection
+    - [1209] msg.c — bit-level message serialization and delta-compression for network packets
+    - [1210] huffman.c — adaptive Huffman coding used to compress network message streams
+    - [1211] vm.c — QVM virtual machine entry point and dispatcher (selects JIT or interpreter)
+    - [1212] vm_x86.c — x86/x86-64 JIT compiler for QVM bytecode
+    - [1213] vm_interpreted.c — portable QVM interpreter (fallback when JIT unavailable)
+    - [1214] cm_load.c — BSP collision map loading from .bsp file into in-memory cm_t structure
+    - [1215] cm_trace.c — trace/sweep queries against BSP collision geometry (used by physics and weapons)
+    - [1216] cm_test.c — point-in-brush and contents tests against the collision map
+    - [1217] cm_patch.c — collision map patch (curved surface) tesselation and clipping
+  - [1192] Server (server/): authoritative game state, client connection management, and world simulation
+    - [1218] sv_main.c — server frame loop (SV_Frame), initialization, CVAR/command registration
+    - [1219] sv_client.c — per-client lifecycle: connect/disconnect, userinfo parsing, rate limiting, netchan reads
+    - [1220] sv_snapshot.c — delta-compress and send authoritative game state snapshots to each connected client
+    - [1221] sv_game.c — server↔game-module interface: syscall dispatch for QVM game DLL calls
+    - [1222] sv_world.c — server-side spatial queries: entity linking into BSP areas, trace against world
+    - [1223] sv_init.c — map load sequence, server state allocation, entity baseline building
+    - [1224] sv_ccmds.c — server console commands (map, kick, status, etc.)
+    - [1225] sv_bot.c — bot management on the server: spawn, think, usercmd injection
+    - [1226] sv_net_chan.c — server-side reliable network channel wrapper around net_chan
+    - [1227] server.h — shared server-internal header: sv_t struct, client_t, definitions used across sv_*.c files
+  - [1193] Client (client/): player-facing frame loop — input handling, server message parsing, audio, video
+    - [1228] cl_main.c — client main loop: connection lifecycle, CL_Frame, map load, disconnection
+    - [1229] cl_input.c — sample keyboard/mouse state each frame, build usercmd_t movement command for server
+    - [1230] cl_parse.c — parse incoming server messages: snapshot updates, game state, print commands
+    - [1231] cl_cgame.c — interface to the cgame QVM module: call CG_Init/CG_DrawActiveFrame/etc.
+    - [1232] cl_ui.c — interface to the UI QVM module: call UI_Init/UI_DrawConnectScreen/etc.
+    - [1233] cl_scrn.c — compose the final screen: call renderer + cgame + UI in correct order
+    - [1234] cl_console.c — in-game drop-down console: command history, auto-complete, text rendering
+    - [1235] cl_keys.c — key event routing: bindings, direct console input, or forwarding to UI/cgame
+    - [1236] cl_net_chan.c — client-side reliable network channel (wraps qcommon net_chan)
+    - [1237] cl_http_curl.c / cl_http_windows.c — HTTP downloading of pk3 files using libcurl or WinHTTP
+    - [1238] cl_avi.c — in-game video capture: write AVI files from rendered frames at fixed rate
+    - [1239] cl_cin.c — RoQ cinematic playback for intro/cut-scene videos
+    - [1240] Audio subsystem (snd_*.c / qal.c): software mixer and OpenAL backend
+      - [1241] snd_main.c — audio system entry points: init, update, shutdown; selects DMA or OpenAL backend
+      - [1242] snd_dma.c — software DMA audio backend: mix sounds into DMA buffer
+      - [1243] snd_mix.c — per-channel audio mixing: spatialise, resample, attenuate, sum into paint buffer
+      - [1244] snd_mem.c — sound sample loading and caching from WAV/OGG files
+      - [1245] snd_openal.c — OpenAL backend: positional 3D audio via OpenAL API
+      - [1246] snd_codec.c / snd_codec_wav.c / snd_codec_ogg.c / snd_codec_opus.c — codec plugins for WAV, OGG Vorbis, and Opus audio decoding
+      - [1247] qal.c / qal.h — dynamically-loaded OpenAL function table (avoids hard link to libopenal)
+  - [1194] Renderer (renderergl1/ + renderergl2/ + renderercommon/): OpenGL visual pipeline for world, entities, and effects
+    - [1248] renderergl1/ — classic OpenGL 1.x fixed-function renderer (default path)
+      - [1251] tr_main.c — per-frame render dispatch: cull entities, sort surfaces by shader, submit draw lists
+      - [1252] tr_backend.c — low-level OpenGL state machine: set textures, blend modes, depth, draw calls
+      - [1253] tr_bsp.c — BSP world rendering: PVS culling, leaf/cluster traversal, surface batch collection
+      - [1254] tr_shader.c — parse .shader material scripts, build shader_t objects for every surface type
+      - [1255] tr_surface.c — dispatch per-surface type (BSP face, MD3 mesh, patch) to appropriate draw path
+      - [1256] tr_shade.c / tr_shade_calc.c — evaluate per-stage shader programs: deform verts, tcMod, rgbGen, alphaGen
+      - [1257] tr_image.c — texture cache: load, upload to GL, generate mipmaps, handle lightmaps
+      - [1258] tr_model.c — load and cache MD3 models; tr_model_iqm.c adds IQM skeletal model support
+      - [1259] tr_animation.c — tag-based MD3 animation and attachment; bone lerp for IQM
+      - [1260] tr_mesh.c — MD3 mesh deformation (vertex lerp between keyframes)
+      - [1261] tr_curve.c — Bezier patch tessellation into triangle meshes for curved BSP surfaces
+      - [1262] tr_light.c — dynamic light radius culling and per-entity light grid lookup
+      - [1263] tr_sky.c — skybox rendering (6-sided cube texture or cloud layer)
+      - [1264] tr_marks.c — decal projection onto world geometry (bullet holes, scorch marks)
+      - [1265] tr_flares.c — screen-space lens flare rendering for light entities
+      - [1266] tr_shadows.c — planar blob shadow projection onto world surfaces
+      - [1267] tr_scene.c — public render API: R_AddRefEntityToScene, R_AddPolyToScene, R_RenderScene
+      - [1268] tr_cmds.c — render command list building and dispatch to backend (double-buffered)
+      - [1269] tr_init.c — OpenGL context setup, extension detection, CVARs, R_Init / R_Shutdown
+      - [1270] tr_local.h — renderer-internal types: trGlobals_t, shader_t, srfType_t, drawSurf_t
+    - [1249] renderergl2/ — extended OpenGL 2.x renderer with GLSL shaders, HDR, and normal mapping
+    - [1250] renderercommon/ — code shared between renderergl1 and renderergl2: image loading, fonts, noise
+      - [1271] tr_font.c — bitmap font loading and glyph rendering for in-game text
+      - [1272] tr_image_tga.c / tr_image_jpg.c / tr_image_png.c / tr_image_bmp.c / tr_image_pvr.c — image format decoders
+      - [1273] tr_noise.c — turbulence/noise functions used by shader deform and tcMod
+      - [1274] tr_subs.c — lightweight renderer utility functions shared between gl1 and gl2
+      - [1275] puff.c — zlib DEFLATE decompressor (used for PNG textures)
+      - [1276] qgl.h / tr_public.h / tr_common.h / tr_types.h — renderer public API and shared type definitions
+  - [1195] Game module (game/): server-side game logic — weapons, physics, scoring, bots — runs as QVM or native DLL
+    - [1277] Shared game code (bg_*): physics and utilities compiled into both server game and cgame
+      - [1278] bg_pmove.c — player movement physics: strafe, friction, jumping, water, ladder — run identically on client (prediction) and server (authority)
+      - [1279] bg_slidemove.c — slide-along-surface collision response used by bg_pmove
+      - [1280] bg_misc.c — shared config string parsing, weapon info tables, item definitions
+      - [1281] bg_lib.c — portable C standard library subset (memcpy, strlen, etc.) for use inside QVM
+      - [1282] bg_public.h — public interface of shared game code: playerState_t, entityState_t, weapon/item constants
+    - [1283] Server-only game logic (g_*): authoritative entity simulation
+      - [1284] g_main.c — game module init/shutdown, G_RunFrame, entity state broadcast, game mode selection
+      - [1285] g_client.c — player connect/disconnect, team assignment, spectator, initial spawn
+      - [1286] g_active.c — per-frame player think: apply usercmd, run physics via bg_pmove, check triggers
+      - [1287] g_combat.c — damage calculation, death, gibbing, obituary logging, score events
+      - [1288] g_weapon.c — server-side weapon fire logic: hit-scan traces, area damage, projectile spawning
+      - [1289] g_missile.c — rocket, grenade, and plasma projectile physics and impact handling
+      - [1290] g_items.c — weapon/ammo/health/powerup pickup spawning, respawn timers, touch callbacks
+      - [1291] g_spawn.c — parse map entity key/value pairs and spawn corresponding game entities
+      - [1292] g_mover.c — doors, platforms, rotating objects, func_train path following
+      - [1293] g_trigger.c — trigger volumes: touch triggers, teleporters, push pads
+      - [1294] g_target.c — target entities: kill, relay, speaker, print, delay
+      - [1295] g_team.c / g_team.h — team game (CTF) logic: flag capture, return, drop, team scores
+      - [1296] g_session.c — persistent client session data across map changes (score, team preference)
+      - [1297] g_cmds.c — in-game client commands from server side: say, team, vote, give
+      - [1298] g_svcmds.c — server console commands affecting game state: addbot, say, etc.
+      - [1299] g_misc.c — miscellaneous entity types: lights, sound emitters, intermission cameras
+      - [1300] g_arenas.c — bot vs player arena management (bot challenge ladders)
+      - [1301] g_bot.c — bot spawning, team management, and removal from server game side
+      - [1302] g_mem.c — game module memory allocator (static pool, reset each map load)
+      - [1303] g_utils.c — utility functions: entity search, temp entities, vector math helpers
+      - [1304] g_local.h — game-internal struct definitions: gentity_t, gclient_t, level_locals_t
+    - [1305] Bot AI in game/ (ai_*): decision-making logic that uses botlib AAS for movement
+      - [1306] ai_main.c / ai_main.h — top-level bot think: select goal, run state machine, call sub-systems
+      - [1307] ai_dmnet.c / ai_dmnet.h — deathmatch navigation net: goal node selection and transitions
+      - [1308] ai_dmq3.c / ai_dmq3.h — Q3-specific deathmatch AI: weapon choice, item priority, combat decisions
+      - [1309] ai_team.c / ai_team.h — CTF team AI: flag carrier escort, flag room defense, retrieval logic
+      - [1310] ai_chat.c — bot chat message selection based on game events (taunt, kill, death)
+      - [1311] ai_cmd.c — translate AI decisions into game commands (move to, attack, use item)
+      - [1312] ai_vcmd.c — bot voice chat command generation
+  - [1196] CGame module (cgame/): client-side prediction, event handling, and visual feedback
+    - [1313] cg_main.c — cgame module entry: CG_Init, CG_DrawActiveFrame, CG_Shutdown; owns cgs/cg globals
+    - [1314] cg_snapshot.c — receive and process server snapshots: interpolate entity states between frames
+    - [1315] cg_predict.c — client-side movement prediction using bg_pmove to hide network latency
+    - [1316] cg_ents.c — update client entity list from snapshot; choose render model for each entity type
+    - [1317] cg_players.c — player model rendering: select skin/model, run tag animations, attach gun/head
+    - [1318] cg_view.c — camera setup: normal first-person, follow-cam, obituary cam, view kick on damage
+    - [1319] cg_draw.c / cg_newdraw.c — HUD rendering: health/armor/ammo gauges, crosshair, icons, timer
+    - [1320] cg_weapons.c — weapon view model: bob, sway, muzzle flash, ejection brass effects
+    - [1321] cg_effects.c — particle effects: explosions, blood, sparks, water splashes, rail trail
+    - [1322] cg_event.c — handle entity events from snapshot: play sounds, spawn effects on hits/deaths
+    - [1323] cg_marks.c — project and cache decals on world surfaces (bullet holes, scorch marks)
+    - [1324] cg_localents.c — short-lived visual-only entities: brass, gibs, debris that don't need server sync
+    - [1325] cg_particles.c — particle system for smoke, sparks, and environmental effects
+    - [1326] cg_scoreboard.c — end-of-round and TAB scoreboard rendering
+    - [1327] cg_servercmds.c — handle server-to-client text commands from cgame context (cs, print, scores)
+    - [1328] cg_consolecmds.c — register client-side console commands available in-game (cg_thirdperson, etc.)
+    - [1329] cg_playerstate.c — detect changes in playerState_t between snapshots and trigger local effects
+    - [1330] cg_info.c — loading screen: map name, player models, mission briefing display
+    - [1331] cg_local.h — cgame-internal types: cg_t (per-frame state), cgs_t (static config), centity_t
+    - [1332] cg_syscalls.c / cg_syscalls.asm — QVM syscall trampolines from cgame QVM to engine
+  - [1197] UI module (ui/ + q3_ui/): menu system and in-game HUD
+    - [1333] ui/ — Missionpack/Team Arena UI module (newer, used when running Team Arena)
+      - [1334] ui_main.c — UI module entry points: UI_Init, UI_DrawConnectScreen, UI_KeyEvent, UI_Refresh
+      - [1335] ui_atoms.c — shared helper functions: UI_DrawString, UI_DrawRect, UI_FocusPushPop
+      - [1336] ui_shared.c / ui_shared.h — menu item infrastructure: MenuFrame, Item_Init, draw/key dispatch
+      - [1337] ui_gameinfo.c — load and parse gameinfo/arenas config to populate map/mode lists
+      - [1338] ui_players.c — player model viewer widget used in character selection screen
+      - [1339] ui_syscalls.c — QVM syscall trampolines from ui module to engine
+    - [1340] q3_ui/ — Original Quake III Arena UI module (classic menus)
+      - [1341] ui_main.c (q3_ui) — top-level menu stack manager; draws and routes input to active menu
+      - [1342] ui_menu.c — main menu layout and button definitions
+      - [1343] ui_ingame.c — in-game escape menu (resume, settings, quit)
+      - [1344] ui_connect.c — connecting/loading screen displayed while joining server
+      - [1345] ui_controls2.c — key bindings configuration screen
+      - [1346] ui_display.c / ui_network.c / ui_sound.c — graphics, network, and audio options screens
+      - [1347] ui_demo2.c — demo browser and playback UI
+      - [1348] ui_confirm.c — generic yes/no confirmation dialog widget
+      - [1349] ui_mods.c — installed mod (fs_game) browser and launcher
+      - [1350] ui_credits.c — scrolling credits screen
+      - [1351] ui_atoms.c (q3_ui) / ui_mfield.c — text input field widget and shared draw helpers
+      - [1352] ui_gameinfo.c (q3_ui) — arena/map metadata parsing for single-player challenge
+      - [1353] ui_players.c (q3_ui) — player model preview widget in character/opponent selection
+  - [1198] Bot AI library (botlib/): Area Awareness System path-finding and per-behavior AI decision making
+    - [1354] AAS (Area Awareness System): pre-computed navigation mesh used for bot path-finding
+      - [1355] be_aas_main.c — AAS initialisation, frame update, and shutdown; owns aasworld global
+      - [1356] be_aas_file.c — load and verify .aas binary nav-mesh files produced by q3map2
+      - [1357] be_aas_bspq3.c — sample BSP geometry to build AAS area connectivity at compile time
+      - [1358] be_aas_cluster.c — partition AAS areas into portal-connected clusters for efficient routing
+      - [1359] be_aas_route.c — A* routing between AAS areas; cache shortest-path results
+      - [1360] be_aas_routealt.c — alternative route caching to give bots varied paths (avoids repetition)
+      - [1361] be_aas_reach.c — reachability analysis: detect and classify transitions between AAS areas (walk, jump, rocket-jump, teleport)
+      - [1362] be_aas_move.c — move the bot along an AAS route: steer, avoid obstacles, handle reachabilities
+      - [1363] be_aas_entity.c — track dynamic entities (doors, platforms) in AAS and update connectivity
+      - [1364] be_aas_optimize.c — post-process AAS graph: merge redundant areas, compress
+      - [1365] be_aas_sample.c — point-sample the AAS world: find area containing a point, trace in AAS
+      - [1366] be_aas_debug.c — AAS visualisation helpers for debugging (draw areas, reach, route)
+    - [1367] Bot behaviour engines (be_ai_*): high-level AI sub-systems
+      - [1368] be_ai_move.c — movement goal execution: walk toward goal, handle jumps and falls, predict positions
+      - [1369] be_ai_goal.c — goal selection: choose between items, enemy, flag, and defensive goals by weight
+      - [1370] be_ai_weap.c — weapon selection: pick best weapon for range and available ammo
+      - [1371] be_ai_chat.c — bot chat: parse opponent chat for keywords, select canned reply from personality file
+      - [1372] be_ai_char.c — bot personality: load .char files defining skill level, chat aggression, item preference
+      - [1373] be_ai_gen.c — generic utility functions shared across be_ai_* modules
+    - [1374] be_ea.c — elementary actions: convert high-level bot decisions into usercmd_t inputs (move dir, jump, fire, etc.)
+    - [1375] be_interface.c — botlib public API: BotLibSetup, BotLoadMap, BotAllocateClient, etc. — called by sv_bot.c
+    - [1376] l_* utility library: support code used by botlib (not game-specific)
+      - [1377] l_memory.c — botlib custom memory allocator with tagging and leak detection
+      - [1378] l_script.c — token-based script parser used to read .char / .aas / .wep config files
+      - [1379] l_precomp.c — pre-processor for script files (#define, #include support)
+      - [1380] l_struct.c — generic struct serializer: read/write typed fields from script tokens
+      - [1381] l_libvar.c — library-internal cvars (separate from engine cvars) for botlib tuning
+      - [1382] l_log.c — botlib log file writer for debugging AI decisions
+      - [1383] l_crc.c — CRC32 used to verify AAS file integrity
+  - [1199] Platform abstraction (sys/ + sdl/): OS entry point, SDL windowing, OpenGL context, audio, and input
+    - [1384] sys/ — OS-level entry point and platform-specific code
+      - [1385] sys_main.c — main() / WinMain(): parse args, call Com_Init, run Com_Frame loop, signal handling
+      - [1386] sys_unix.c — POSIX-specific: fork for dedicated server, dlopen for QVM DSOs, crash handler
+      - [1387] sys_win32.c — Windows-specific: registry queries, console window, mini-dump crash reporting
+      - [1388] sys_osx.m — macOS Objective-C shims: app bundle path resolution, Finder launch support
+      - [1389] sys_autoupdater.c — optional auto-update downloader that runs as a child process
+      - [1390] con_tty.c — ANSI terminal console for headless dedicated server on Unix
+      - [1391] con_win32.c — Win32 console window for Windows dedicated server
+      - [1392] con_passive.c / con_log.c — no-op console and log-to-file for environments without tty
+    - [1393] sdl/ — SDL2 back-end for windowing, OpenGL, audio, and input
+      - [1394] sdl_glimp.c — create SDL window and OpenGL context; handle fullscreen/resolution switches
+      - [1395] sdl_input.c — poll SDL events for keyboard, mouse, joystick; feed into engine key/mouse queue
+      - [1396] sdl_snd.c — open SDL audio device, fill audio buffer callback for software sound mixer
+      - [1397] sdl_gamma.c — set display gamma ramp via SDL for brightness control
+  - [1200] Build system (CMakeLists.txt + cmake/): CMake configuration targeting Linux, macOS, and Windows
+    - [1398] CMakeLists.txt (root) — top-level CMake project: version, compiler flags, option flags (USE_OPENAL, USE_CURL, etc.)
+    - [1399] cmake/ — CMake helper modules: FindSDL2, FindOGG, system detection scripts
+    - [1400] cmake/FindSDL2.cmake and similar — locates third-party library headers/libs on each host platform
+    - [1401] code/CMakeLists.txt (per-module) — per-subsystem source lists: builds engine, game.qvm, cgame.qvm, ui.qvm
+    - [1402] misc/ — icons, .desktop files, Windows .rc resources, macOS app bundle Info.plist templates
+    - [1403] docs/ — developer documentation: protocol specs, renderer architecture, pak file format
+
