@@ -20,7 +20,11 @@ class WorkerGrpcClient private constructor(
          * Intent 14: Connect to the intent server at the given address.
          * Reads VOLUNTAS_USER and VOLUNTAS_TOKEN from the environment for per-request auth.
          */
-        fun connect(address: String): WorkerGrpcClient {
+        fun connect(
+            address: String,
+            username: String = System.getenv("VOLUNTAS_USER") ?: "",
+            authToken: String = System.getenv("VOLUNTAS_TOKEN") ?: ""
+        ): WorkerGrpcClient {
             val parts = address.split(":")
             val host = parts[0]
             val port = parts[1].toInt()
@@ -33,8 +37,6 @@ class WorkerGrpcClient private constructor(
             // Intent 15: Create stub for IntentService
             val stub = IntentServiceGrpc.newBlockingStub(channel)
 
-            val username = System.getenv("VOLUNTAS_USER") ?: ""
-            val authToken = System.getenv("VOLUNTAS_TOKEN") ?: ""
             return WorkerGrpcClient(channel, stub, username, authToken)
         }
     }

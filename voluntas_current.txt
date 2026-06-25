@@ -598,6 +598,7 @@
                 done: true
         2447. confirm that we can test the thing
             done: true
+  2784. bots
 2101. develop voluntas
   2015. The project must be buildable, testable, and runnable via a consistent Gradle toolchain with shell script convenience wrappers
     2017. Gradle build uses the protobuf plugin to generate Kotlin stubs from voluntas.proto; each runnable component has a dedicated JavaExec task
@@ -695,8 +696,6 @@
       output_tokens: 500
       completed: 1778165098830711000
       done: true
-    2680. parent 2529 2587
-        deleted: true
   2551. Create scheduling module with when/today/this-week meta intents
       started: 1778425717104785700
       input_tokens: 8000
@@ -709,5 +708,33 @@
       output_tokens: 350
       completed: 1778426740695343600
       done: true
-2545. test auth
-    deleted: true
+  2726. Jira bot: sync intent tree to Jira Cloud with watch mode
+      started: 1782413245594857000
+      input_tokens: 0
+      output_tokens: 0
+      completed: 1782413250648931800
+      done: true
+    2729. State-tracked incremental sync engine
+        completed: 1782413248888112000
+        done: true
+      2732. SyncState.kt — persists intentId→jiraKey mapping
+          completed: 1782413246689044200
+          done: true
+      2733. SyncEngine.kt — stateful processNode, skips already-synced
+          completed: 1782413247134732800
+          done: true
+    2730. Jira REST client and config
+        completed: 1782413249311746600
+        done: true
+      2734. JiraConfig.kt — add pollIntervalSeconds and stateFile fields
+          completed: 1782413247573679000
+          done: true
+      2736. WorkerGrpcClient.kt — explicit credential params on connect()
+          completed: 1782413248446279700
+          done: true
+    2731. Watch loop and CLI entry point
+        completed: 1782413249756422700
+        done: true
+      2735. JiraBot.kt — --watch flag, poll loop, state load/save
+          completed: 1782413248005664300
+          done: true

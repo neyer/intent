@@ -146,6 +146,23 @@ tasks.register<JavaExec>("runGenerateVoluntasPlan") {
     classpath = sourceSets["main"].runtimeClasspath
 }
 
+// Task to run the Jira bot.
+// One-shot:  ./gradlew runJiraBot
+// Watch mode: ./gradlew runJiraBot --args="jira-bot.json --watch"
+// Custom config: ./gradlew runJiraBot --args="/path/to/config.json"
+tasks.register<JavaExec>("runJiraBot") {
+    group = "application"
+    description = "Sync intent tree to Jira Cloud (use --args='jira-bot.json --watch' for loop mode)"
+    mainClass.set("com.apxhard.voluntas.jirabot.JiraBotKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    // --args from CLI overrides the default; otherwise default to jira-bot.json
+    if (project.hasProperty("args")) {
+        args = (project.property("args") as String).split(" ")
+    } else {
+        args = listOf("jira-bot.json")
+    }
+}
+
 // Task to print runtime classpath for use in shell scripts
 tasks.register("printRuntimeClasspath") {
     doLast {
