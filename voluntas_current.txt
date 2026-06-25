@@ -535,6 +535,7 @@
           1347. consume(request: SubmitOpRequest): CommandResult — dispatches oneof payload: CreateIntent, UpdateIntentText, UpdateIntentParent, AddField, SetFieldValue, InvokeMacro, WriteNoGarbage
       2270. user authentication module
           started: 1775078066148124356
+          done: true
         2274. should be included in standard module
         2277. defines user type
           2290. user 'name' field should use the same naming approach auto generated for types

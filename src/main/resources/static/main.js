@@ -7,6 +7,7 @@ const browserStream = BrowserStream.load();
 let ws = null;
 let currentFocusText = "";
 let pendingAuthCapture = null; // { username, authToken } set when provide-user-token is in flight
+let lastTreeMsg = null;        // most recent scope/tree_update message, for re-render on filter change
 
 function isResultError(result) {
     const lower = result.toLowerCase();
@@ -57,8 +58,10 @@ function connect() {
                     pendingAuthCapture = null;
                 }
             }
+            lastTreeMsg = msg;
             renderTree(msg);
         } else if (msg.type === "tree_update") {
+            lastTreeMsg = msg;
             renderTree(msg);
         }
     };
@@ -76,11 +79,28 @@ function connect() {
 // --- Command submission ---
 
 function submitCommand(command) {
+    const trimmed = command.trim();
+
+    // --- Client-side commands: handled locally, never sent to server ---
+    if (trimmed === "filter-done") {
+        const el = document.getElementById("result-text");
+        const mask = browserStream.getFilterMask();
+        if (mask.done === true) {
+            browserStream.clearFilterField("done");
+            el.textContent = "Filter off — done items are now visible";
+        } else {
+            browserStream.setFilterField("done", true);
+            el.textContent = "Filter on — hiding items where done=true";
+        }
+        el.classList.remove("error");
+        if (lastTreeMsg) renderTree(lastTreeMsg);
+        return;
+    }
+
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         document.getElementById("result-text").textContent = "Not connected";
         return;
     }
-    const trimmed = command.trim();
     if (trimmed.startsWith("provide-user-token ")) {
         const token = trimmed.slice("provide-user-token ".length).trim();
         pendingAuthCapture = { username: currentFocusText, authToken: token };
@@ -167,13 +187,25 @@ function renderTree(msg) {
     spacer2.className = "tree-spacer";
     tree.appendChild(spacer2);
 
-    // Children - indented with single space
-    if (msg.children) {
-        msg.children.forEach(function (intent) {
-            renderIntentRow(intent, " ", "child").forEach(function (el) {
-                tree.appendChild(el);
-            });
+    // Children - apply filter mask, then render visible ones
+    const allChildren = msg.children || [];
+    const visibleChildren = allChildren.filter(function (c) {
+        return !browserStream.intentIsFiltered(c);
+    });
+    const hiddenCount = allChildren.length - visibleChildren.length;
+
+    visibleChildren.forEach(function (intent) {
+        renderIntentRow(intent, " ", "child").forEach(function (el) {
+            tree.appendChild(el);
         });
+    });
+
+    if (hiddenCount > 0) {
+        const notice = document.createElement("div");
+        notice.className = "filter-notice";
+        notice.textContent = " … " + hiddenCount + " item" + (hiddenCount === 1 ? "" : "s") +
+            " hidden by filter (filter-done to toggle)";
+        tree.appendChild(notice);
     }
 }
 
@@ -326,7 +358,9 @@ document.addEventListener("DOMContentLoaded", function () {
     fetch("/api/commands")
         .then(function (r) { return r.json(); })
         .then(function (data) {
-            allCommands = (data.commands || []).slice().sort();
+            var clientCommands = ["filter-done"];
+            var serverCommands = data.commands || [];
+            allCommands = serverCommands.concat(clientCommands).sort();
             commandArgTypes = data.argTypes || {};
         })
         .catch(function (err) {

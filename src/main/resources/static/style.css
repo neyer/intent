@@ -122,3 +122,9 @@ body {
     color: #6272a4;
     font-style: italic;
 }
+
+.filter-notice {
+    color: #44475a;
+    font-style: italic;
+    white-space: pre;
+}

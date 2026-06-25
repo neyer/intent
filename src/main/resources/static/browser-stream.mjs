@@ -10,11 +10,14 @@ import { VoluntasIntentService, META_ROOT, STRING_INTENT_TYPE } from './voluntas
 
 const DEFAULT_KEY = 'voluntas-browser-stream';
 const USER_TYPE_PATH = '/browser/current-user';
+const FILTER_MASK_TYPE_PATH = '/browser/filter-mask';
 
 export class BrowserStream {
   #svc;
-  #userTypeId    = null;
-  #userInstanceId = null;
+  #userTypeId       = null;
+  #userInstanceId   = null;
+  #filterMaskTypeId = null;
+  #filterMaskId     = null;
   #storageKey;
 
   /** @private — use BrowserStream.load() */
@@ -90,6 +93,58 @@ export class BrowserStream {
   }
 
   // ----------------------------------------------------------
+  // Filter mask
+  // ----------------------------------------------------------
+
+  /**
+   * Returns the current filter mask as a plain object, e.g. { done: true }.
+   * An intent is hidden from view when ALL its field values equal the
+   * corresponding values in the mask.
+   */
+  getFilterMask() {
+    if (this.#filterMaskId === null) return {};
+    const intent = this.#svc.getById(this.#filterMaskId);
+    if (!intent) return {};
+    const json = intent.fieldValues()['mask-json'] ?? '{}';
+    try { return JSON.parse(json); } catch { return {}; }
+  }
+
+  /**
+   * Add or update a field in the filter mask.
+   * e.g. setFilterField('done', true) → hide intents where done===true
+   */
+  setFilterField(name, value) {
+    if (this.#filterMaskId === null) return;
+    const mask = this.getFilterMask();
+    mask[name] = value;
+    this.#svc.setFieldValue(this.#filterMaskId, 'mask-json', JSON.stringify(mask));
+    this.save();
+  }
+
+  /**
+   * Remove a field from the filter mask, so it no longer contributes to filtering.
+   */
+  clearFilterField(name) {
+    if (this.#filterMaskId === null) return;
+    const mask = this.getFilterMask();
+    delete mask[name];
+    this.#svc.setFieldValue(this.#filterMaskId, 'mask-json', JSON.stringify(mask));
+    this.save();
+  }
+
+  /**
+   * Returns true if a server-side intent object (with plain fieldValues map)
+   * matches every field in the filter mask and should therefore be hidden.
+   */
+  intentIsFiltered(serverIntent) {
+    const mask = this.getFilterMask();
+    const keys = Object.keys(mask);
+    if (keys.length === 0) return false;
+    const fv = serverIntent.fieldValues || {};
+    return keys.every(k => fv[k] === mask[k]);
+  }
+
+  // ----------------------------------------------------------
   // Persistence
   // ----------------------------------------------------------
 
@@ -109,8 +164,10 @@ export class BrowserStream {
   clear() {
     try { localStorage.removeItem(this.#storageKey); } catch {}
     this.#svc = VoluntasIntentService.new('Browser');
-    this.#userTypeId    = null;
-    this.#userInstanceId = null;
+    this.#userTypeId       = null;
+    this.#userInstanceId   = null;
+    this.#filterMaskTypeId = null;
+    this.#filterMaskId     = null;
     this.#initialize();
   }
 
@@ -122,20 +179,46 @@ export class BrowserStream {
   // ----------------------------------------------------------
 
   #initialize() {
-    // Check if the type was already defined (e.g. loaded from localStorage)
-    const existingTypeId = this.#svc.getEntityByPath(USER_TYPE_PATH);
-    if (existingTypeId !== null) {
-      this.#userTypeId = existingTypeId;
-      const instances = this.#svc.getInstancesOfType(existingTypeId);
+    let needsSave = false;
+
+    // --- /browser/current-user type ---
+    const existingUserTypeId = this.#svc.getEntityByPath(USER_TYPE_PATH);
+    if (existingUserTypeId !== null) {
+      this.#userTypeId = existingUserTypeId;
+      const instances = this.#svc.getInstancesOfType(existingUserTypeId);
       if (instances.length > 0) this.#userInstanceId = instances[0].id();
     } else {
-      // Define /browser/current-user as a visible subtype of STRING_INTENT_TYPE
-      // (placed under META_ROOT later, so instances will be isMeta=true)
       this.#userTypeId = this.#svc.defineType(USER_TYPE_PATH, {
         parentTypeId: STRING_INTENT_TYPE,
       });
       this.#svc.addField(this.#userTypeId, 'auth-token', 'STRING');
-      this.save();
+      needsSave = true;
     }
+
+    // --- /browser/filter-mask type + singleton instance ---
+    const existingFMTypeId = this.#svc.getEntityByPath(FILTER_MASK_TYPE_PATH);
+    if (existingFMTypeId !== null) {
+      this.#filterMaskTypeId = existingFMTypeId;
+      const instances = this.#svc.getInstancesOfType(existingFMTypeId);
+      if (instances.length > 0) this.#filterMaskId = instances[0].id();
+    } else {
+      this.#filterMaskTypeId = this.#svc.defineType(FILTER_MASK_TYPE_PATH, {
+        parentTypeId: STRING_INTENT_TYPE,
+      });
+      this.#svc.addField(this.#filterMaskTypeId, 'mask-json', 'STRING');
+      needsSave = true;
+    }
+
+    // Create the singleton filter-mask instance if not yet present
+    if (this.#filterMaskTypeId !== null && this.#filterMaskId === null) {
+      const inst = this.#svc.addIntentOfType(this.#filterMaskTypeId, 'filter-mask', META_ROOT);
+      this.#filterMaskId = inst?.id() ?? null;
+      if (this.#filterMaskId !== null) {
+        this.#svc.setFieldValue(this.#filterMaskId, 'mask-json', '{}');
+      }
+      needsSave = true;
+    }
+
+    if (needsSave) this.save();
   }
 }
