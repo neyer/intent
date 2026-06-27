@@ -46,3 +46,4 @@ bin/
 .claude/
 
 jira-bot.json
+.claude/worktrees/

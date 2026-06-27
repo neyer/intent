@@ -598,7 +598,69 @@
                 done: true
         2447. confirm that we can test the thing
             done: true
+    2789. jira sync
+        started: 1782572447798092000
+      2798. config and connection
+        2816. must load config from a JSON file; fail with a clear error if missing or malformed
+        2819. must reject config missing jiraBaseUrl, jiraUserEmail, jiraApiToken, or jiraProjectKey
+        2822. must verify Jira credentials on startup and print the authenticated user's display name
+        2825. must connect to the intent gRPC server; accept credentials from config fields or VOLUNTAS_USER / VOLUNTAS_TOKEN env vars
+      2801. tree walking
+        2828. must walk the intent tree starting from rootIntentId (default 0)
+        2831. must exclude meta intents (isMeta = true) from sync
+        2834. when skipDone = true, must exclude intents where the done field is true
+        2837. must track each intent's depth: 1 = direct children of root, 2 = grandchildren, etc.
+      2804. issue creation
+        2840. must map intent depth to Jira issue type using the depthToIssueType config map
+        2843. must use intent text as the issue summary, truncated to 255 characters
+        2846. must include the intent ID in the issue description; include field values if present
+        2849. must link to parent issue via parentLinkField; use epicLinkField for depth-2 intents when configured
+        2852. if parent linking fails, must retry with the alternate link field before falling back to creating an orphan issue
+        2855. must wait 150ms between Jira API calls to avoid rate limiting
+      2807. deep intents as comments
+        2858. intents at depth > maxIssueDepth must become a comment on their nearest ancestor issue rather than a new issue
+        2861. comment text must include the full subtree as an indented bullet list with intent IDs and field values
+        2864. new children that appear later under a commented intent must be added as additional comments to the same ancestor issue
+      2810. state persistence
+        2867. must persist a mapping of intentId to Jira issue key in a JSON state file after each sync
+        2870. on subsequent runs, intents already present in state must be skipped without re-creating them
+        2873. must save whatever state was accumulated even if the sync fails partway through
+      2813. operational modes
+        2876. default (one-shot) mode: walk the tree once, print a summary of issues created and comments added, then exit
+        2879. --watch mode: re-run sync every pollIntervalSeconds, printing a timestamped line each poll; report counts only when something changed
+        2882. --list-fields mode: print all custom field IDs and names from the Jira instance without syncing, to help users discover epicLinkField
+        2885. --init mode: write an example jira-bot.json.example file and exit
   2784. bots
+    2726. Jira bot: sync intent tree to Jira Cloud with watch mode
+        started: 1782413245594857000
+        input_tokens: 0
+        output_tokens: 0
+        completed: 1782413250648931800
+        done: true
+      2729. State-tracked incremental sync engine
+          completed: 1782413248888112000
+          done: true
+        2732. SyncState.kt — persists intentId→jiraKey mapping
+            completed: 1782413246689044200
+            done: true
+        2733. SyncEngine.kt — stateful processNode, skips already-synced
+            completed: 1782413247134732800
+            done: true
+      2730. Jira REST client and config
+          completed: 1782413249311746600
+          done: true
+        2734. JiraConfig.kt — add pollIntervalSeconds and stateFile fields
+            completed: 1782413247573679000
+            done: true
+        2736. WorkerGrpcClient.kt — explicit credential params on connect()
+            completed: 1782413248446279700
+            done: true
+      2731. Watch loop and CLI entry point
+          completed: 1782413249756422700
+          done: true
+        2735. JiraBot.kt — --watch flag, poll loop, state load/save
+            completed: 1782413248005664300
+            done: true
 2101. develop voluntas
   2015. The project must be buildable, testable, and runnable via a consistent Gradle toolchain with shell script convenience wrappers
     2017. Gradle build uses the protobuf plugin to generate Kotlin stubs from voluntas.proto; each runnable component has a dedicated JavaExec task
@@ -708,33 +770,3 @@
       output_tokens: 350
       completed: 1778426740695343600
       done: true
-  2726. Jira bot: sync intent tree to Jira Cloud with watch mode
-      started: 1782413245594857000
-      input_tokens: 0
-      output_tokens: 0
-      completed: 1782413250648931800
-      done: true
-    2729. State-tracked incremental sync engine
-        completed: 1782413248888112000
-        done: true
-      2732. SyncState.kt — persists intentId→jiraKey mapping
-          completed: 1782413246689044200
-          done: true
-      2733. SyncEngine.kt — stateful processNode, skips already-synced
-          completed: 1782413247134732800
-          done: true
-    2730. Jira REST client and config
-        completed: 1782413249311746600
-        done: true
-      2734. JiraConfig.kt — add pollIntervalSeconds and stateFile fields
-          completed: 1782413247573679000
-          done: true
-      2736. WorkerGrpcClient.kt — explicit credential params on connect()
-          completed: 1782413248446279700
-          done: true
-    2731. Watch loop and CLI entry point
-        completed: 1782413249756422700
-        done: true
-      2735. JiraBot.kt — --watch flag, poll loop, state load/save
-          completed: 1782413248005664300
-          done: true
