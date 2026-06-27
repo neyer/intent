@@ -600,9 +600,9 @@
             done: true
     2789. jira sync
         started: 1782572447798092000
-        input_tokens: 8000
-        output_tokens: 600
-        completed: 1782572646907996200
+        input_tokens: 12000
+        output_tokens: 800
+        completed: 1782573199050205000
         done: true
       2798. config and connection
         2816. must load config from a JSON file; fail with a clear error if missing or malformed
@@ -626,9 +626,9 @@
         2861. comment text must include the full subtree as an indented bullet list with intent IDs and field values
         2864. new children that appear later under a commented intent must be added as additional comments to the same ancestor issue
       2810. state persistence
-        2867. must persist a mapping of intentId to Jira issue key in a JSON state file after each sync
-        2870. on subsequent runs, intents already present in state must be skipped without re-creating them
-        2873. must save whatever state was accumulated even if the sync fails partway through
+        2867. must store sync state as fields on the intent itself in the Voluntas stream: jira_key (STRING) for issues, jira_comment_ancestor (STRING) for comments
+        2870. on subsequent runs, intents with jira_key or jira_comment_ancestor already set must be skipped without re-creating them in Jira
+        2873. each intent's state is written to the stream immediately after it is synced, so partial progress is preserved automatically even if the sync fails mid-run
       2813. operational modes
         2876. default (one-shot) mode: walk the tree once, print a summary of issues created and comments added, then exit
         2879. --watch mode: re-run sync every pollIntervalSeconds, printing a timestamped line each poll; report counts only when something changed
