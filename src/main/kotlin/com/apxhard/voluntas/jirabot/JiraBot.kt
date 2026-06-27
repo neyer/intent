@@ -84,27 +84,20 @@ fun main(args: Array<String>) {
     }
     println(" OK")
 
-    // Load persisted sync state
-    val stateFile = File(config.stateFile)
-    val state = SyncState.load(stateFile)
-    val alreadySynced = state.issues.size + state.commentAncestors.size
-    if (alreadySynced > 0) {
-        println("Loaded state: $alreadySynced intent(s) already synced")
-    }
     println()
 
     Runtime.getRuntime().addShutdownHook(Thread {
         grpc.close()
-        println("\nShutdown — state saved to ${stateFile.absolutePath}")
+        println("\nShutdown")
     })
 
     val walker = TreeWalker(grpc)
-    val engine = SyncEngine(config, jira, walker, state)
+    val engine = SyncEngine(config, jira, walker, grpc)
 
     if (watchMode) {
-        runWatchLoop(engine, state, stateFile, config.pollIntervalSeconds)
+        runWatchLoop(engine, config.pollIntervalSeconds)
     } else {
-        val result = runSync(engine, state, stateFile)
+        val result = runSync(engine)
         println()
         println("=== Done: $result ===")
     }
@@ -112,24 +105,16 @@ fun main(args: Array<String>) {
     grpc.close()
 }
 
-private fun runSync(engine: SyncEngine, state: SyncState, stateFile: File): SyncResult {
+private fun runSync(engine: SyncEngine): SyncResult {
     return try {
-        val result = engine.syncOnce()
-        state.save(stateFile)
-        result
+        engine.syncOnce()
     } catch (e: Exception) {
         System.err.println("Sync failed: ${e.message}")
-        state.save(stateFile)  // save whatever progress was made
         throw e
     }
 }
 
-private fun runWatchLoop(
-    engine: SyncEngine,
-    state: SyncState,
-    stateFile: File,
-    intervalSeconds: Int
-) {
+private fun runWatchLoop(engine: SyncEngine, intervalSeconds: Int) {
     println("Watching for changes. Press Ctrl+C to stop.\n")
     while (true) {
         val ts = LocalDateTime.now().format(timeFmt)
@@ -149,7 +134,6 @@ private fun runWatchLoop(
             println(" none")
         }
 
-        state.save(stateFile)
         sleepSeconds(intervalSeconds)
     }
 }
@@ -177,8 +161,7 @@ private fun writeExampleConfig() {
         epicLinkField    = null,   // set to e.g. "customfield_10014" for classic projects
         rootIntentId     = 0,
         skipDone         = false,
-        pollIntervalSeconds = 30,
-        stateFile        = "jira-bot-state.json"
+        pollIntervalSeconds = 30
     )
     val path = "jira-bot.json.example"
     File(path).writeText(gson.toJson(example))
@@ -197,6 +180,6 @@ private fun writeExampleConfig() {
     println("  - parentLinkField: \"parent\" for team-managed projects (default).")
     println("    For classic projects linking Stories to Epics, try \"customfield_10014\".")
     println("  - Intents deeper than maxIssueDepth become comments on their nearest")
-    println("    ancestor issue. State is persisted in stateFile between runs.")
+    println("    ancestor issue. Sync state is stored as fields on each intent in the stream.")
     println("  - pollIntervalSeconds: how often to poll in watch mode (default 30).")
 }
