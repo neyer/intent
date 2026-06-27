@@ -148,6 +148,8 @@ cd intent
 ./tools/server.sh
 ```
 
+Once the server is up, you can view and navigate the intent tree at http://localhost:8888
+
 ### Try it
 
 ```bash
@@ -162,13 +164,6 @@ cd intent
 ./tools/intent-mark.sh done <id>
 ```
 
-### Visualize
-
-```bash
-./tools/visualize.sh
-```
-
-Then open `index.html` in a browser for an interactive view of the full intent tree.
 
 ---
 

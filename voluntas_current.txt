@@ -600,6 +600,10 @@
             done: true
     2789. jira sync
         started: 1782572447798092000
+        input_tokens: 8000
+        output_tokens: 600
+        completed: 1782572646907996200
+        done: true
       2798. config and connection
         2816. must load config from a JSON file; fail with a clear error if missing or malformed
         2819. must reject config missing jiraBaseUrl, jiraUserEmail, jiraApiToken, or jiraProjectKey
