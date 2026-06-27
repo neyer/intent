@@ -1,12 +1,14 @@
 package com.apxhard.voluntas.jirabot
 
+import com.apxhard.voluntas.worker.WorkerGrpcClient
+import voluntas.v1.FieldType
 import voluntas.v1.FieldValueProto
 
 class SyncEngine(
     private val config: JiraConfig,
     private val jira: JiraClient,
     private val walker: TreeWalker,
-    val state: SyncState
+    private val grpc: WorkerGrpcClient
 ) {
     private data class PassResult(val issues: Int, val comments: Int)
 
@@ -28,8 +30,8 @@ class SyncEngine(
     }
 
     private fun processNode(node: IntentNode, nearestIssueKey: String?): PassResult {
-        val existingIssueKey = state.getIssueKey(node.intent.id)
-        val existingCommentAncestor = state.getCommentAncestor(node.intent.id)
+        val existingIssueKey = node.intent.fieldValuesMap["jira_key"]?.stringValue?.takeIf { it.isNotBlank() }
+        val existingCommentAncestor = node.intent.fieldValuesMap["jira_comment_ancestor"]?.stringValue?.takeIf { it.isNotBlank() }
 
         // Already synced as an issue — just pass its key to children
         if (existingIssueKey != null) {
@@ -46,24 +48,19 @@ class SyncEngine(
 
         return if (issueType != null) {
             val key = createIssue(node, issueType, nearestIssueKey)
-            state.recordIssue(node.intent.id, key)
+            recordIssue(node.intent.id, key)
             val childResult = recurseChildren(node.children, key)
             PassResult(1 + childResult.issues, childResult.comments)
         } else if (nearestIssueKey != null) {
-            // Too deep for an issue — add this node's full subtree as one comment
             val text = buildSubtreeText(node, indent = 0)
             val indent = "  ".repeat(config.maxIssueDepth)
             print("${indent}[comment on $nearestIssueKey] ${node.intent.text.take(60)}")
             jira.addComment(nearestIssueKey, text)
             println(" → done")
             Thread.sleep(150)
-            state.recordComment(node.intent.id, nearestIssueKey)
-            // Don't recurse — children are captured in the comment text.
-            // If new children appear later, they'll be added as separate comments
-            // because processNode will be called on them in a future pass and
-            // commentAncestors will route them to nearestIssueKey.
-            //
-            // To enable that, mark each child in the subtree too:
+            recordComment(node.intent.id, nearestIssueKey)
+            // Children captured in the comment text; mark them so future passes
+            // route any new grandchildren to the same ancestor issue.
             markSubtreeAsCommented(node.children, nearestIssueKey)
             PassResult(0, 1)
         } else {
@@ -84,11 +81,23 @@ class SyncEngine(
 
     private fun markSubtreeAsCommented(nodes: List<IntentNode>, ancestorKey: String) {
         for (node in nodes) {
-            if (!state.isProcessed(node.intent.id)) {
-                state.recordComment(node.intent.id, ancestorKey)
+            val alreadyProcessed = node.intent.fieldValuesMap["jira_key"]?.stringValue?.isNotBlank() == true ||
+                node.intent.fieldValuesMap["jira_comment_ancestor"]?.stringValue?.isNotBlank() == true
+            if (!alreadyProcessed) {
+                recordComment(node.intent.id, ancestorKey)
             }
             markSubtreeAsCommented(node.children, ancestorKey)
         }
+    }
+
+    private fun recordIssue(intentId: Long, jiraKey: String) {
+        grpc.addField(intentId, "jira_key", FieldType.FIELD_TYPE_STRING)
+        grpc.setStringField(intentId, "jira_key", jiraKey)
+    }
+
+    private fun recordComment(intentId: Long, ancestorKey: String) {
+        grpc.addField(intentId, "jira_comment_ancestor", FieldType.FIELD_TYPE_STRING)
+        grpc.setStringField(intentId, "jira_comment_ancestor", ancestorKey)
     }
 
     private fun createIssue(node: IntentNode, issueType: String, parentKey: String?): String {
@@ -164,9 +173,9 @@ class SyncEngine(
     }
 
     private fun formatFieldValues(node: IntentNode): String =
-        node.intent.fieldValuesMap.entries.joinToString(", ") { (k, v) ->
-            "$k=${v.displayString()}"
-        }
+        node.intent.fieldValuesMap.entries
+            .filter { it.key !in setOf("jira_key", "jira_comment_ancestor") }
+            .joinToString(", ") { (k, v) -> "$k=${v.displayString()}" }
 
     private fun FieldValueProto.displayString(): String = when (valueCase) {
         FieldValueProto.ValueCase.STRING_VALUE     -> stringValue

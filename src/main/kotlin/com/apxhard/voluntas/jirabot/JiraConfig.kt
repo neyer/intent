@@ -35,8 +35,7 @@ data class JiraConfig(
     val epicLinkField: String? = null,
     val rootIntentId: Long = 0,
     val skipDone: Boolean = false,
-    val pollIntervalSeconds: Int = 30,
-    val stateFile: String = "jira-bot-state.json"
+    val pollIntervalSeconds: Int = 30
 ) {
     fun issueTypeForDepth(depth: Int): String? = depthToIssueType[depth.toString()]
 
