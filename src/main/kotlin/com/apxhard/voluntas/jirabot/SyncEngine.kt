@@ -152,6 +152,8 @@ class SyncEngine(
         val key = jira.createIssue(
             summary = node.intent.text,
             issueType = issueType,
+            parentKey = null,
+            parentLinkField = config.parentLinkField,
             intentId = node.intent.id,
             fieldNotes = fieldNotes
         )
